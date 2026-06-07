@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
 <title>The AI Era Needs an Investment Conscience</title>
 <style>
   :root{
@@ -22,7 +23,7 @@
     -webkit-font-smoothing:antialiased;
   }
   #stage{position:fixed; inset:0;}
-  canvas{display:block; width:100%; height:100%;}
+  canvas{display:block; width:100%; height:100%; touch-action:none;}
 
   /* ---- title / brand strip ---- */
   #brand{
@@ -123,9 +124,6 @@
   }
   #ninaWrap.missing #ninaVid{display:none;}
   #ninaWrap.missing #ninaCap{color:var(--muted); text-transform:none; letter-spacing:.2px;}
-  @media (max-width:780px){
-    #ninaWrap{ width:140px; right:14px; bottom:150px; }
-  }
 
   #hint{position:fixed; bottom:64px; right:22px; z-index:10; font-size:11.5px; color:#56607a; pointer-events:none;}
   #loading{
@@ -135,10 +133,110 @@
   }
   #loading.gone{opacity:0; pointer-events:none;}
   #loading .spark{color:var(--conscience); font-weight:700;}
+  /* =====================================================================
+     TAP-TO-START GATE (mobile / touch only - shown via JS, never on desktop)
+     A one-time overlay whose first tap unlocks audio+video playback inside
+     the user gesture. Style only; visibility is JS-gated to coarse pointers.
+     ===================================================================== */
+  #tapGate{
+    position:fixed; inset:0; z-index:40; display:none;
+    align-items:center; justify-content:center; flex-direction:column;
+    background:rgba(5,7,13,.82); backdrop-filter:blur(3px);
+    color:var(--ink); text-align:center; padding:24px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #tapGate.show{display:flex;}
+  #tapGate .tg-kicker{font-size:11px; letter-spacing:3px; text-transform:uppercase;
+    color:var(--conscience); font-weight:700; margin-bottom:14px;}
+  #tapGate .tg-play{
+    width:84px; height:84px; border-radius:50%; border:2px solid var(--conscience);
+    background:var(--conscience); color:#150a26; font-size:30px; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 10px 40px rgba(185,139,255,.5);
+  }
+  #tapGate .tg-title{margin:18px 0 4px; font-size:19px; font-weight:750;}
+  #tapGate .tg-sub{font-size:13px; color:var(--muted); max-width:280px;}
+
+  /* =====================================================================
+     MOBILE LAYOUT BACKBONE - everything below is gated behind the existing
+     breakpoints / coarse pointer. Desktop render path is never touched.
+     ===================================================================== */
   @media (max-width:780px){
-    #card{width:auto; left:14px; right:14px; bottom:88px;}
-    #brand{left:16px;} #tools{right:14px;}
-    #rail{padding:10px 14px;} #rail button{padding:7px 10px;}
+    /* --- brand: shrink + relocate so it stops colliding with the tools row --- */
+    #brand{ left:12px; top:10px; right:96px; }
+    #brand .kicker{ font-size:9px; letter-spacing:2px; }
+    #brand h1{ font-size:14px; line-height:1.2; }
+    #brand .by{ display:none; }
+
+    /* --- tools: collapse the 3 buttons into a compact icon row --- */
+    #tools{ top:10px; right:10px; gap:5px; }
+    #tools button{
+      padding:7px 0; width:40px; height:34px; font-size:0; /* hide text label */
+      display:flex; align-items:center; justify-content:center;
+      border-radius:9px; overflow:hidden;
+    }
+    #tools button::before{ font-size:15px; line-height:1; }
+    #btnRotate::before{ content:"\21bb"; }     /* orbit glyph */
+    #btnLipsync::before{ content:"\1F3A5"; }    /* movie camera */
+    #btnAuto::before{ content:"\25B6"; }        /* play triangle */
+    #btnAuto.on::before{ content:"\25A0"; }     /* stop square when narrating */
+
+    /* --- card -> bottom sheet: top ~54% stays the 3D scene --- */
+    #card{
+      left:0; right:0; bottom:0; width:auto;
+      max-height:46vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+      border-radius:16px 16px 0 0; border-left:none; border-right:none; border-bottom:none;
+      padding:14px 16px calc(56px + env(safe-area-inset-bottom));
+      box-shadow:0 -16px 50px rgba(0,0,0,.6);
+    }
+    #card h2{ font-size:19px; line-height:1.2; }
+    #card .sub{ font-size:12px; margin-bottom:9px; }
+    #card p{ font-size:13px; }
+
+    /* --- Nina lip-sync -> small corner thumbnail, pinned below the tools,
+           no overlap with the bottom-sheet card --- */
+    #ninaWrap{
+      width:96px; right:10px; top:52px; bottom:auto; padding:4px;
+      border-radius:12px;
+    }
+    #ninaVid{ border-radius:8px; }
+    #ninaCap{ font-size:8px; letter-spacing:.5px; margin-top:3px; }
+
+    /* --- rail: safe-area aware, sits above the bottom sheet --- */
+    #rail{
+      padding:8px 12px max(10px, env(safe-area-inset-bottom));
+      gap:8px; z-index:12; /* above the card sheet so transport stays reachable */
+      background:linear-gradient(0deg,#05070d 55%,rgba(5,7,13,0));
+    }
+    #rail button{ padding:9px 12px; }
+    #dots{ gap:6px; }
+    #dots .dot{ width:11px; height:11px; }
+    #hint{ display:none; }
+  }
+
+  /* --- landscape on short screens: bound the sheet so the card title cannot
+         clip, and keep the scene visible above it --- */
+  @media (max-width:990px) and (max-height:520px) and (orientation:landscape){
+    #card{
+      max-height:62vh; top:auto; bottom:0;
+      padding:10px 16px calc(48px + env(safe-area-inset-bottom));
+    }
+    #card h2{ font-size:16px; }
+    #brand h1{ font-size:12px; }
+    #ninaWrap{ width:78px; top:46px; }
+  }
+
+  /* --- bigger touch targets on coarse pointers (dots + per-slide play) --- */
+  @media (pointer:coarse){
+    #dots .dot{ position:relative; }
+    #dots .dot::after{ content:""; position:absolute; inset:-16px; } /* ~44px hit area */
+    #playSlide{ width:42px; height:42px; min-width:42px; font-size:16px; }
+  }
+
+  /* --- respect reduced-motion: calm the card swap transition --- */
+  @media (prefers-reduced-motion:reduce){
+    #card{ transition:opacity .2s ease; }
+    #card.swap{ transform:none; }
   }
 </style>
 </head>
@@ -159,7 +257,7 @@
 
   <!-- Nina lip-synced talking-head panel: shown only when lip-sync video is ON -->
   <div id="ninaWrap" aria-hidden="true">
-    <video id="ninaVid" preload="none" playsinline></video>
+    <video id="ninaVid" preload="none" playsinline poster="posters/nina-poster.jpg"></video>
     <div id="ninaCap">Nina &middot; lip-sync narration</div>
   </div>
 
@@ -182,6 +280,15 @@
 
   <div id="hint">Drag to orbit &middot; scroll to zoom &middot; &larr;/&rarr; or Space to advance</div>
   <div id="loading">Loading the <span class="spark">Investment Conscience</span> model&hellip;</div>
+
+  <!-- Tap-to-start gate: shown via JS on touch / coarse-pointer / small screens only.
+       Desktop never sees this (autoplay works there) - JS adds .show conditionally. -->
+  <div id="tapGate" aria-hidden="true">
+    <div class="tg-kicker">Investment Conscience</div>
+    <div class="tg-play">&#9654;</div>
+    <div class="tg-title">Tap to begin</div>
+    <div class="tg-sub">Unlocks narration and the lip-sync video for this interactive deck.</div>
+  </div>
 
   <!-- single narration element; src swaps per scene -->
   <audio id="vo" preload="none"></audio>
@@ -233,6 +340,35 @@ let consciousRing, aiBar, loopGroup, wspGroup;
 let autorotate = false, autoplay = false;
 let lipsync = false;   // lip-sync video narration toggle (Nina talking-head per scene)
 
+/* ---------------------------------------------------------------------------
+   DEVICE PROFILE - drives every mobile/low-power branch. Computed ONCE.
+   Desktop takes the original code path unchanged: IS_TOUCH=false -> no tap gate,
+   full pixelRatio, full bloom, eager media.
+
+   IMPORTANT: "touch device" here means touch is the PRIMARY pointer (a phone /
+   tablet), NOT merely "a digitizer exists." A touchscreen Windows laptop driven
+   by a mouse reports maxTouchPoints>0 but has a FINE primary pointer - it must
+   take the desktop path, so we gate on (pointer:coarse) as the primary signal
+   and only treat a no-fine-pointer + touch-capable device as touch. This keeps
+   Paul's (touch-capable) desktop on the unchanged desktop path. */
+const COARSE_PRIMARY = window.matchMedia('(pointer:coarse)').matches;
+const HAS_FINE       = window.matchMedia('(pointer:fine)').matches
+                       || window.matchMedia('(any-pointer:fine)').matches;
+const TOUCH_CAPABLE  = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+// Primary-touch device only: coarse-primary, OR touch-capable with NO fine pointer at all.
+const IS_TOUCH  = COARSE_PRIMARY || (TOUCH_CAPABLE && !HAS_FINE);
+const IS_SMALL  = window.matchMedia('(max-width:780px)').matches;
+const LOW_POWER = (navigator.hardwareConcurrency || 8) <= 4;
+const REDUCED   = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+// "Mobile profile" = the constrained path. Strictly additive: a wide desktop
+// with a fine pointer is never in it, so its render path is byte-for-byte the old one.
+const MOBILE = IS_TOUCH && (IS_SMALL || LOW_POWER);
+let mediaUnlocked = !IS_TOUCH;   // desktop is unlocked from the start (autoplay works)
+
+// reused scratch vector for the per-frame particle loop (avoids allocating a new
+// THREE.Vector3 per particle per frame - safe on every device, helps GC everywhere)
+const _scratch = new THREE.Vector3();
+
 // scene + camera-tween state (declared up top: the bootstrap calls goScene/animate
 // before their original in-place declarations would have run -> temporal-dead-zone)
 let cur = 0;
@@ -241,7 +377,10 @@ let camFrom=null, camTo=null, camTgtFrom=null, camTgtTo=null, camT=1;
 function init(){
   const canvas = document.getElementById('gl');
   renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Desktop keeps the original min(dpr,2). Mobile caps dpr to 1.5 (1 on low-power)
+  // to slash fill-cost on high-density phone screens. Desktop path is unchanged.
+  const dprCap = MOBILE ? (LOW_POWER ? 1 : 1.5) : 2;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, dprCap));
   // Neutral tonemapping keeps saturated reds/ambers/greens SATURATED when they go
   // bright (ACES would roll hot colors to white).
   renderer.toneMapping = (THREE.NeutralToneMapping !== undefined)
@@ -289,13 +428,32 @@ function init(){
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  // threshold 1.05: only HDR-bright emissive nodes bloom; the dim body stays crisp
-  bloom = new UnrealBloomPass(new THREE.Vector2(1,1), 1.05, 0.55, 1.05);
-  composer.addPass(bloom);
+  // threshold 1.05: only HDR-bright emissive nodes bloom; the dim body stays crisp.
+  // Desktop ALWAYS gets full bloom. On the constrained mobile profile we skip the
+  // UnrealBloom pass (its biggest single GPU cost) - the scene still reads, just
+  // without the glow halo. bloom stays null there; every bloom.* use is guarded.
+  if (!MOBILE){
+    bloom = new UnrealBloomPass(new THREE.Vector2(1,1), 1.05, 0.55, 1.05);
+    composer.addPass(bloom);
+  }
 
   clock = new THREE.Clock();
   window.addEventListener('resize', onResize);
   onResize();
+
+  // --- pause the render loop when the tab is hidden or the canvas is offscreen ---
+  // (safe everywhere; resumes on visibility/intersection. clock.getDelta() is reset
+  //  on resume so eased emissive values don't jump after a long pause.)
+  document.addEventListener('visibilitychange', ()=>{
+    pageVisible = !document.hidden;
+    if (pageVisible){ clock.getDelta(); requestFrame(); }
+  });
+  if ('IntersectionObserver' in window){
+    new IntersectionObserver((entries)=>{
+      canvasOnScreen = entries[0].isIntersecting;
+      if (canvasOnScreen){ clock.getDelta(); requestFrame(); }
+    }, { threshold:0 }).observe(canvas);
+  }
 
   // expose for live tuning
   window.__IC = { THREE, scene, camera, controls, NODES, goScene };
@@ -706,6 +864,30 @@ function loadMedia(i, play){
 }
 function stopMedia(){ try{ VO.pause(); }catch(e){} try{ VID.pause(); }catch(e){} }
 
+// Lightweight prefetch: warm ONLY the next scene's audio (not all 11) when a scene
+// starts, so Next feels instant without paying an 11-file download up front. Uses a
+// throwaway Audio() with preload=auto; the browser caches it for the real <audio>.
+// Lip-sync mp4s are deliberately NOT prefetched on the mobile profile (heavy); they
+// load on first play via loadMedia. On desktop we also warm the next mp4 when lip-sync
+// is on, matching the old always-ready feel.
+const _prefetched = new Set();
+function prefetchNext(i){
+  const n = i + 1;
+  if (n >= SCENES.length) return;
+  const akey = 'a'+n;
+  if (!_prefetched.has(akey)){
+    _prefetched.add(akey);
+    const a = new Audio(); a.preload = 'auto'; a.src = voSrc(n);
+  }
+  if (lipsync && !MOBILE){
+    const vkey = 'v'+n;
+    if (!_prefetched.has(vkey)){
+      _prefetched.add(vkey);
+      const v = document.createElement('video'); v.preload = 'auto'; v.src = vidSrc(n);
+    }
+  }
+}
+
 // the lip-sync video failed to load for this scene -> remember it, fall back to audio
 VID.addEventListener('error', ()=>{
   lipsyncAvail[cur] = false;
@@ -767,6 +949,7 @@ function goScene(i, instant=false){
   // ---- narration: in narrated-autoplay, play this scene's clip; otherwise just preload it ----
   if (autoplay) loadVO(cur, true);
   else { stopVO(); loadVO(cur, false); }
+  prefetchNext(cur);   // warm only slide N+1's audio (and mp4 on desktop w/ lip-sync)
 
   // ---- rail state ----
   $('prev').disabled = cur===0;
@@ -785,9 +968,18 @@ function renderDots(){
   });
 }
 
-/* ---------- render loop: ease emissive toward targets ---------- */
+/* ---------- render loop: ease emissive toward targets ----------
+   The loop pauses when the tab is hidden or the canvas scrolls offscreen, then
+   resumes cleanly. Safe on every device (desktop included): when the page is
+   visible and the canvas is on-screen - the normal case - it runs exactly as
+   before. A single rAF is in flight at a time (the `rafId` guard). */
+let rafId = null, pageVisible = true, canvasOnScreen = true;
+function loopShouldRun(){ return pageVisible && canvasOnScreen; }
+function requestFrame(){ if (rafId === null && loopShouldRun()) rafId = requestAnimationFrame(animate); }
 function animate(){
-  requestAnimationFrame(animate);
+  rafId = null;
+  if (!loopShouldRun()) return;          // paused: stop scheduling until resumed
+  rafId = requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
   const ease = 1 - Math.pow(0.0025, dt);   // smooth approach
@@ -818,7 +1010,7 @@ function animate(){
     const flow = (t*0.16 + st.phase) % 1;
     for (let i=0;i<st.count;i++){
       let f = (i/(st.count) + flow) % 1;
-      const p = new THREE.Vector3().lerpVectors(st.a, st.b, f);
+      const p = _scratch.lerpVectors(st.a, st.b, f);   // reused, no per-particle alloc
       p.y += Math.sin(f*Math.PI)*0.5;            // gentle arc
       pos[i*3]=p.x; pos[i*3+1]=p.y; pos[i*3+2]=p.z;
     }
@@ -842,8 +1034,10 @@ function animate(){
   if (NODES.cpo && NODES.cpo.cur > 0.1) NODES.cpo.mesh.rotation.y += dt*0.5;
 
   // bloom strength tracks how much is lit (more lit = more glow, capped)
-  let litSum = 0; Object.keys(NODES).forEach(k=> litSum += NODES[k].cur);
-  bloom.strength = 0.7 + Math.min(0.9, litSum*0.045);
+  if (bloom){
+    let litSum = 0; Object.keys(NODES).forEach(k=> litSum += NODES[k].cur);
+    bloom.strength = 0.7 + Math.min(0.9, litSum*0.045);
+  }
 
   // camera tween
   if (camT < 1){
@@ -862,7 +1056,7 @@ function onResize(){
   const w = window.innerWidth, h = window.innerHeight;
   camera.aspect = w/h; camera.updateProjectionMatrix();
   renderer.setSize(w, h); composer.setSize(w, h);
-  bloom.setSize(w, h);
+  if (bloom) bloom.setSize(w, h);
 }
 
 /* ---------- UI wiring ---------- */
@@ -929,6 +1123,68 @@ window.addEventListener('keydown', e=>{
   if (e.key==='ArrowLeft'){ e.preventDefault(); stopAuto(); goScene(cur-1); }
 });
 
+/* =====================================================================
+   MOBILE / TOUCH WIRING - tap-to-start gate + swipe nav. Entirely no-op on
+   desktop: initMobile() returns immediately when IS_TOUCH is false, so the
+   gate never shows and no touch listeners are attached. Desktop autoplay,
+   look, and feel are untouched.
+   ===================================================================== */
+function initMobile(){
+  if (!IS_TOUCH) return;   // DESKTOP: do nothing at all.
+
+  // --- Tap-to-start gate: unlock <audio> + <video> inside the first user gesture.
+  // Browsers on touch devices block programmatic play() until a gesture has played
+  // media once. We muted-play-then-pause both elements within the tap, which leaves
+  // subsequent programmatic play() allowed. ---
+  const gate = $('tapGate');
+  gate.classList.add('show');
+  gate.setAttribute('aria-hidden','false');
+  const unlock = ()=>{
+    gate.removeEventListener('click', unlock);
+    const primer = (el)=>{
+      try{
+        const wasMuted = el.muted;
+        el.muted = true;
+        // ensure a real src so play() resolves; slide-1 is the first thing shown
+        if (!el.src){ el.src = (el===VID) ? vidSrc(0) : voSrc(0); }
+        const p = el.play();
+        if (p && p.then){
+          p.then(()=>{ el.pause(); el.currentTime = 0; el.muted = wasMuted; })
+           .catch(()=>{ el.muted = wasMuted; });
+        } else { el.pause(); el.muted = wasMuted; }
+      }catch(e){ /* best-effort priming */ }
+    };
+    primer(VO);
+    primer(VID);
+    mediaUnlocked = true;
+    gate.classList.remove('show');
+    gate.setAttribute('aria-hidden','true');
+    // start narrated playback for the scene the user is on (slide 1 by default)
+    setTimeout(()=>{ startAuto(); }, 60);
+  };
+  gate.addEventListener('click', unlock, { once:false });
+
+  // --- Horizontal swipe -> goScene(+/-1). Vertical gestures are left to the card's
+  // own scroll (touch-action:pan-y is not set on the card; the sheet scrolls
+  // natively). We only act on a clearly-horizontal swipe on the stage area. ---
+  const stage = $('stage');
+  let sx=0, sy=0, tracking=false;
+  stage.addEventListener('touchstart', (e)=>{
+    if (e.touches.length !== 1){ tracking=false; return; }
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking=true;
+  }, { passive:true });
+  stage.addEventListener('touchend', (e)=>{
+    if (!tracking) return; tracking=false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)*1.5){
+      stopAuto();
+      if (dx < 0){ if (cur>=SCENES.length-1) goScene(0); else goScene(cur+1); }
+      else { goScene(cur-1); }
+    }
+  }, { passive:true });
+}
+
 // fade out the loader once the first frame is up
 requestAnimationFrame(()=> requestAnimationFrame(()=>{
   const l=$('loading'); if(l){ l.classList.add('gone'); setTimeout(()=>l.remove(), 700); }
@@ -937,8 +1193,9 @@ requestAnimationFrame(()=> requestAnimationFrame(()=>{
 /* ---------- bootstrap (runs last: every const/let above is now initialized) ---------- */
 init();
 buildScene();
-animate();
+requestFrame();   // starts the (now pause-aware) render loop
 goScene(0, true);
+initMobile();     // tap-gate + swipe + media prefetch wiring (all no-ops on desktop)
 </script>
 </body>
 </html>
