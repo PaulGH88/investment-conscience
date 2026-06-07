@@ -1,0 +1,8 @@
+# OS / editor cruft
+Thumbs.db
+.DS_Store
+*.bak
+*.tmp
+
+# local dev servers / logs
+*.log

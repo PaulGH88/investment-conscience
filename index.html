@@ -1,0 +1,944 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The AI Era Needs an Investment Conscience</title>
+<style>
+  :root{
+    --bg:#05070d; --panel:rgba(13,18,28,.72); --panel2:#141925;
+    --ink:#eaf0fb; --muted:#94a0bb; --line:#1e2840;
+    --pain:#ff5c6c;        /* red - pain */
+    --invest:#f0a92b;      /* amber - investment */
+    --cap:#48c2ff;         /* blue - capability */
+    --value:#3ee08f;       /* green - value */
+    --conscience:#b98bff;  /* violet - the conscience / governance */
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); overflow:hidden;
+    font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed; inset:0;}
+  canvas{display:block; width:100%; height:100%;}
+
+  /* ---- title / brand strip ---- */
+  #brand{
+    position:fixed; top:18px; left:24px; z-index:10; pointer-events:none;
+    text-shadow:0 2px 18px rgba(0,0,0,.8);
+  }
+  #brand .kicker{font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--conscience); font-weight:700;}
+  #brand h1{margin:2px 0 0; font-size:20px; font-weight:700; letter-spacing:.2px;}
+  #brand .by{font-size:11.5px; color:var(--muted); margin-top:2px;}
+
+  /* ---- the narrative card ---- */
+  #card{
+    position:fixed; left:24px; bottom:96px; z-index:10; width:min(440px,42vw);
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:20px 22px 22px; backdrop-filter:blur(14px);
+    box-shadow:0 24px 60px rgba(0,0,0,.55);
+    transition:opacity .5s ease, transform .5s ease;
+  }
+  #card.swap{opacity:0; transform:translateY(10px);}
+  #card .scene-head{display:flex; align-items:center; gap:10px;}
+  #card .scene-no{font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); font-weight:700; flex:1;}
+  #card .scene-no .accent{color:var(--accentDyn,#fff);}
+  /* per-slide narration play button */
+  #playSlide{
+    background:var(--accentDyn,#b98bff); color:#150a26; border:none;
+    border-radius:50%; width:34px; height:34px; min-width:34px; cursor:pointer;
+    font-size:14px; font-weight:800; line-height:1; display:flex;
+    align-items:center; justify-content:center; transition:.15s; padding:0;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+  }
+  #playSlide:hover{filter:brightness(1.12);}
+  #playSlide.playing{background:var(--panel2); color:var(--accentDyn,#fff); border:1px solid var(--accentDyn,#b98bff);}
+  #card h2{margin:6px 0 4px; font-size:23px; line-height:1.18; font-weight:750; letter-spacing:.2px;}
+  #card .sub{font-size:13px; color:var(--muted); margin:0 0 12px; font-weight:600;}
+  #card p{margin:0 0 10px; font-size:14px; color:#cdd6ea;}
+  #card p:last-child{margin-bottom:0;}
+  #card .chain{
+    font-variant-numeric:tabular-nums; font-weight:700; font-size:14px;
+    letter-spacing:.3px; margin:12px 0 2px; color:#fff;
+  }
+  #card .chain .p{color:var(--pain);} #card .chain .i{color:var(--invest);}
+  #card .chain .c{color:var(--cap);} #card .chain .v{color:var(--value);}
+  #card .chain .arrow{color:var(--muted); padding:0 5px;}
+  #card .quote{
+    border-left:3px solid var(--accentDyn,#b98bff); padding:6px 0 6px 13px; margin:12px 0 0;
+    font-style:italic; color:#e7edfb; font-size:13.5px;
+  }
+
+  /* ---- transport / scene rail ---- */
+  #rail{
+    position:fixed; left:0; right:0; bottom:0; z-index:11;
+    display:flex; align-items:center; gap:14px;
+    padding:12px 22px; background:linear-gradient(0deg,#05070d 30%,rgba(5,7,13,0));
+  }
+  #rail button{
+    background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:9px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:650;
+    transition:.15s;
+  }
+  #rail button:hover:not(:disabled){border-color:var(--conscience); color:#fff;}
+  #rail button:disabled{opacity:.35; cursor:default;}
+  #rail button.primary{background:var(--conscience); color:#150a26; border-color:var(--conscience);}
+  #dots{display:flex; gap:7px; flex:1; align-items:center; justify-content:center;}
+  #dots .dot{
+    width:11px; height:11px; border-radius:50%; background:#26314c; cursor:pointer;
+    border:1px solid #34415f; transition:.18s; position:relative;
+  }
+  #dots .dot:hover{transform:scale(1.25);}
+  #dots .dot.on{background:var(--conscience); border-color:var(--conscience); box-shadow:0 0 12px var(--conscience);}
+  #counter{font-size:12px; color:var(--muted); min-width:54px; text-align:right; font-variant-numeric:tabular-nums;}
+
+  /* ---- top-right controls ---- */
+  #tools{position:fixed; top:18px; right:22px; z-index:11; display:flex; gap:8px;}
+  #tools button{
+    background:var(--panel); border:1px solid var(--line); color:var(--muted);
+    border-radius:9px; padding:7px 12px; cursor:pointer; font-size:12.5px; font-weight:600;
+    backdrop-filter:blur(10px); transition:.15s;
+  }
+  #tools button:hover{color:var(--ink); border-color:var(--conscience);}
+  #tools button.on{color:#150a26; background:var(--conscience); border-color:var(--conscience);}
+
+  /* ---- Nina lip-sync talking-head panel (shown only when lip-sync video is ON) ---- */
+  #ninaWrap{
+    position:fixed; right:22px; bottom:96px; z-index:12; width:min(248px,22vw);
+    background:var(--panel); border:1px solid var(--conscience); border-radius:16px;
+    padding:8px; backdrop-filter:blur(14px);
+    box-shadow:0 24px 60px rgba(0,0,0,.6);
+    display:none;                 /* hidden until lip-sync is toggled on */
+  }
+  #ninaWrap.show{display:block;}
+  #ninaVid{
+    width:100%; display:block; border-radius:10px; background:#0a0e16;
+    aspect-ratio:332/720; object-fit:cover;
+  }
+  #ninaCap{
+    margin-top:6px; text-align:center; font-size:11px; color:var(--conscience);
+    letter-spacing:1px; text-transform:uppercase; font-weight:700;
+  }
+  #ninaWrap.missing #ninaVid{display:none;}
+  #ninaWrap.missing #ninaCap{color:var(--muted); text-transform:none; letter-spacing:.2px;}
+  @media (max-width:780px){
+    #ninaWrap{ width:140px; right:14px; bottom:150px; }
+  }
+
+  #hint{position:fixed; bottom:64px; right:22px; z-index:10; font-size:11.5px; color:#56607a; pointer-events:none;}
+  #loading{
+    position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
+    background:var(--bg); color:var(--muted); font-size:14px; letter-spacing:.5px;
+    transition:opacity .6s ease;
+  }
+  #loading.gone{opacity:0; pointer-events:none;}
+  #loading .spark{color:var(--conscience); font-weight:700;}
+  @media (max-width:780px){
+    #card{width:auto; left:14px; right:14px; bottom:88px;}
+    #brand{left:16px;} #tools{right:14px;}
+    #rail{padding:10px 14px;} #rail button{padding:7px 10px;}
+  }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="gl"></canvas></div>
+
+  <div id="brand">
+    <div class="kicker">Investment Conscience</div>
+    <h1>The AI Era Needs an Investment Conscience</h1>
+    <div class="by">An interactive presentation &middot; Pain &rarr; Investment &rarr; Capability &rarr; Value</div>
+  </div>
+
+  <div id="tools">
+    <button id="btnRotate" type="button">Auto-orbit: off</button>
+    <button id="btnLipsync" type="button">Lip-sync video: off</button>
+    <button id="btnAuto" type="button">Play narrated &#9654;</button>
+  </div>
+
+  <!-- Nina lip-synced talking-head panel: shown only when lip-sync video is ON -->
+  <div id="ninaWrap" aria-hidden="true">
+    <video id="ninaVid" preload="none" playsinline></video>
+    <div id="ninaCap">Nina &middot; lip-sync narration</div>
+  </div>
+
+  <div id="card">
+    <div class="scene-head">
+      <div class="scene-no">Scene <span class="accent" id="sNo">1</span> of <span id="sTot">11</span></div>
+      <button id="playSlide" type="button" title="Play this scene's narration" aria-label="Play narration">&#9654;</button>
+    </div>
+    <h2 id="sTitle">Loading...</h2>
+    <div class="sub" id="sSub"></div>
+    <div id="sBody"></div>
+  </div>
+
+  <div id="rail">
+    <button id="prev" type="button">&larr; Back</button>
+    <div id="dots"></div>
+    <button id="next" class="primary" type="button">Next &rarr;</button>
+    <span id="counter">1 / 11</span>
+  </div>
+
+  <div id="hint">Drag to orbit &middot; scroll to zoom &middot; &larr;/&rarr; or Space to advance</div>
+  <div id="loading">Loading the <span class="spark">Investment Conscience</span> model&hellip;</div>
+
+  <!-- single narration element; src swaps per scene -->
+  <audio id="vo" preload="none"></audio>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls }   from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }      from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+/* =====================================================================
+   The AI Era Needs an Investment Conscience - interactive 3D deck
+   ---------------------------------------------------------------------
+   Three.js via importmap, PMREM RoomEnvironment for free PBR realism,
+   OrbitControls for an interactive camera, and EffectComposer +
+   UnrealBloomPass for selective bloom glow.
+
+   A per-frame "live bridge" drives the Investment Conscience chain: each
+   scene sets a target emissive level per node, and the render loop eases
+   toward it - so the narrative "lights up" the geometry stage by stage as
+   the story advances. Narration (one mp3 per scene) plays on demand via
+   the per-scene play button, or end-to-end via Play narrated.
+   ===================================================================== */
+
+const COL = {
+  pain:0xff5c6c, invest:0xf0a92b, cap:0x48c2ff, value:0x3ee08f,
+  conscience:0xb98bff, dim:0x2a3450, ai:0xffffff
+};
+const COL_CSS = {
+  pain:'#ff5c6c', invest:'#f0a92b', cap:'#48c2ff', value:'#3ee08f', conscience:'#b98bff'
+};
+
+let renderer, scene, camera, controls, composer, bloom, clock;
+const NODES = {};          // named glowing elements: {mesh, label, target, cur, baseColor}
+const STREAMS = [];        // flowing connector particles between chain nodes
+const STREAMS_ARROWS = []; // AI-compression arrows (declared before buildScene uses it)
+let consciousRing, aiBar, loopGroup, wspGroup;
+let autorotate = false, autoplay = false;
+let lipsync = false;   // lip-sync video narration toggle (Nina talking-head per scene)
+
+// scene + camera-tween state (declared up top: the bootstrap calls goScene/animate
+// before their original in-place declarations would have run -> temporal-dead-zone)
+let cur = 0;
+let camFrom=null, camTo=null, camTgtFrom=null, camTgtTo=null, camT=1;
+
+function init(){
+  const canvas = document.getElementById('gl');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // Neutral tonemapping keeps saturated reds/ambers/greens SATURATED when they go
+  // bright (ACES would roll hot colors to white).
+  renderer.toneMapping = (THREE.NeutralToneMapping !== undefined)
+    ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.04;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05070d);
+  scene.fog = new THREE.Fog(0x05070d, 16, 52);
+
+  // free PBR realism from a procedural environment, kept dim so the lit nodes pop
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  if (scene.environmentIntensity !== undefined) scene.environmentIntensity = 0.30;
+
+  camera = new THREE.PerspectiveCamera(40, window.innerWidth/window.innerHeight, 0.1, 200);
+  camera.position.set(0, 6.0, 18);
+
+  controls = new OrbitControls(camera, canvas);
+  controls.target.set(0, 1.6, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.minDistance = 7;
+  controls.maxDistance = 42;
+  controls.maxPolarAngle = Math.PI * 0.52;
+  controls.autoRotateSpeed = 0.55;
+
+  // dim cinematic lighting; the nodes' own emissive is the bright thing
+  scene.add(new THREE.HemisphereLight(0x35425f, 0x070a11, 0.22));
+  const key = new THREE.DirectionalLight(0xaecbff, 0.28);
+  key.position.set(-8, 10, 7); scene.add(key);
+
+  // wet-floor reflection of the lit chain
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(60, 80),
+    new THREE.MeshStandardMaterial({ color:0x070b14, roughness:0.42, metalness:0.55 })
+  );
+  floor.rotation.x = -Math.PI/2; floor.position.y = -0.02; scene.add(floor);
+
+  // grid for depth
+  const grid = new THREE.GridHelper(80, 40, 0x12203a, 0x0c1424);
+  grid.position.y = 0; grid.material.opacity = 0.35; grid.material.transparent = true;
+  scene.add(grid);
+
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  // threshold 1.05: only HDR-bright emissive nodes bloom; the dim body stays crisp
+  bloom = new UnrealBloomPass(new THREE.Vector2(1,1), 1.05, 0.55, 1.05);
+  composer.addPass(bloom);
+
+  clock = new THREE.Clock();
+  window.addEventListener('resize', onResize);
+  onResize();
+
+  // expose for live tuning
+  window.__IC = { THREE, scene, camera, controls, NODES, goScene };
+}
+
+/* ---------- build the world: the chain + the conscience + AI bar + loop ---- */
+function buildScene(){
+  // ----- the four-node spine: Pain -> Investment -> Capability -> Value -----
+  const spine = [
+    { key:'pain',   label:'PAIN',       color:COL.pain   },
+    { key:'invest', label:'INVESTMENT', color:COL.invest },
+    { key:'cap',    label:'CAPABILITY', color:COL.cap    },
+    { key:'value',  label:'VALUE',      color:COL.value  },
+  ];
+  const span = 13.5, n = spine.length;
+  spine.forEach((s, i)=>{
+    const x = -span/2 + (span/(n-1))*i;
+    makeNode(s.key, s.label, s.color, new THREE.Vector3(x, 1.6, 0));
+  });
+
+  // flowing energy streams between consecutive spine nodes
+  for (let i=0;i<spine.length-1;i++){
+    makeStream(NODES[spine[i].key].mesh.position, NODES[spine[i+1].key].mesh.position,
+               spine[i].color, spine[i+1].color, spine[i].key+'->'+spine[i+1].key);
+  }
+
+  // ----- the AI Compression bar (sits above, "compresses the middle") -----
+  aiBar = new THREE.Group();
+  const barMat = new THREE.MeshPhysicalMaterial({
+    color:0x141c2c, metalness:0.5, roughness:0.3, clearcoat:1, clearcoatRoughness:0.2,
+    emissive:new THREE.Color(COL.ai), emissiveIntensity:0
+  });
+  const bar = new THREE.Mesh(roundedBox(15, 0.55, 1.4, 0.22), barMat);
+  bar.position.set(0, 6.4, -0.2);
+  aiBar.add(bar);
+  aiBar.userData = { mat:barMat, cur:0, target:0 };
+  scene.add(aiBar);
+  NODES['ai'] = { mesh:bar, label:'AI COMPRESSION', target:0, cur:0,
+                  baseColor:new THREE.Color(COL.ai), mat:barMat, sprite:makeLabel('AI COMPRESSION', COL_CSS.cap) };
+  NODES['ai'].sprite.position.set(0, 7.4, -0.2);
+  scene.add(NODES['ai'].sprite);
+
+  // downward "compression" arrows from the bar to the chain (light up in scene 2)
+  for (let k=-1;k<=1;k++){
+    const a = makeArrow(new THREE.Vector3(k*3.2, 5.9, -0.2), new THREE.Vector3(k*3.2, 3.0, -0.2), COL.cap);
+    a.userData.compArrow = true; a.visible = true; a.traverse(m=>{ if(m.material){ m.material.opacity=0.08; m.material.transparent=true; }});
+    scene.add(a); STREAMS_ARROWS.push(a);
+  }
+
+  // ----- the Investment Conscience governing ring (wraps the whole chain) -----
+  consciousRing = new THREE.Group();
+  const ringGeo = new THREE.TorusGeometry(9.4, 0.16, 24, 160);
+  const ringMat = new THREE.MeshPhysicalMaterial({
+    color:0x241638, metalness:0.4, roughness:0.35,
+    emissive:new THREE.Color(COL.conscience), emissiveIntensity:0
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI/2; ring.position.y = 1.6; ring.scale.set(1, 0.62, 1);
+  consciousRing.add(ring);
+  consciousRing.userData = { mat:ringMat, cur:0, target:0 };
+  scene.add(consciousRing);
+  NODES['conscience'] = { mesh:ring, label:'INVESTMENT CONSCIENCE', target:0, cur:0,
+                          baseColor:new THREE.Color(COL.conscience), mat:ringMat,
+                          sprite:makeLabel('INVESTMENT CONSCIENCE', COL_CSS.conscience) };
+  NODES['conscience'].sprite.position.set(0, 4.5, 0);
+  scene.add(NODES['conscience'].sprite);
+
+  // ----- the Value Accountability Loop (orbiting nodes below the spine) ------
+  loopGroup = new THREE.Group();
+  loopGroup.position.set(0, 1.6, 0);
+  const loopSteps = ['Observe','Learn','Reprioritize','Reinvest / Adapt / Retire'];
+  const lr = 4.2;
+  loopSteps.forEach((txt, i)=>{
+    const ang = (i/loopSteps.length)*Math.PI*2 - Math.PI/2;
+    const px = Math.cos(ang)*lr, pz = Math.sin(ang)*lr*0.55;
+    const dotMat = new THREE.MeshPhysicalMaterial({
+      color:0x18233a, metalness:0.3, roughness:0.4,
+      emissive:new THREE.Color(COL.conscience), emissiveIntensity:0
+    });
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.34, 28, 28), dotMat);
+    dot.position.set(px, -2.4, pz);
+    loopGroup.add(dot);
+    const sp = makeLabel(txt, COL_CSS.conscience, 0.85);
+    sp.position.set(px, -1.65, pz);
+    loopGroup.add(sp);
+    NODES['loop'+i] = { mesh:dot, mat:dotMat, baseColor:new THREE.Color(COL.conscience),
+                        target:0, cur:0, sprite:sp, loop:true };
+  });
+  scene.add(loopGroup);
+
+  // ----- "recursive" double-ring marker for the final scene -----
+  const r2geo = new THREE.TorusGeometry(7.0, 0.09, 18, 140);
+  const r2mat = new THREE.MeshPhysicalMaterial({
+    color:0x241638, emissive:new THREE.Color(COL.value), emissiveIntensity:0, roughness:0.4 });
+  const r2 = new THREE.Mesh(r2geo, r2mat);
+  r2.rotation.x = Math.PI/2; r2.position.y = 1.6; r2.scale.set(1, 0.62, 1);
+  scene.add(r2);
+  NODES['recursive'] = { mesh:r2, mat:r2mat, baseColor:new THREE.Color(COL.value), target:0, cur:0 };
+
+  // ----- the Chief Problem Officer: the OWNER node, lifted above the spine -----
+  // A distinct gem that sits over the chain - the person who decides what is worth building.
+  const cpoMat = new THREE.MeshPhysicalMaterial({
+    color:0x101828, metalness:0.4, roughness:0.28, clearcoat:0.8,
+    emissive:new THREE.Color(COL.invest), emissiveIntensity:0
+  });
+  const cpo = new THREE.Mesh(new THREE.OctahedronGeometry(1.05, 2), cpoMat);
+  cpo.position.set(0, 4.2, 0);
+  scene.add(cpo);
+  NODES['cpo'] = { mesh:cpo, mat:cpoMat, baseColor:new THREE.Color(COL.invest),
+                   target:0, cur:0, sprite:makeLabel('CHIEF PROBLEM OFFICER', COL_CSS.invest, 0.92),
+                   basePos:new THREE.Vector3(0,4.2,0) };
+  NODES['cpo'].sprite.position.set(0, 5.7, 0);
+  scene.add(NODES['cpo'].sprite);
+
+  // ----- the WSP loop: D1..D6 as a recursive ring (grounds "recursive" concretely) -----
+  // D1 surface -> D2 map -> D3 prioritize -> D4/D5 dependencies -> D6 sequence -> re-run.
+  wspGroup = new THREE.Group();
+  wspGroup.position.set(0, 1.6, 0);
+  const wspSteps = ['D1 Surface','D2 Map','D3 Prioritize','D4/D5 Dependencies','D6 Sequence','Re-run'];
+  const wr = 6.0;
+  wspSteps.forEach((txt, i)=>{
+    const ang = (i/wspSteps.length)*Math.PI*2 - Math.PI/2;
+    const px = Math.cos(ang)*wr, pz = Math.sin(ang)*wr*0.55;
+    const dotMat = new THREE.MeshPhysicalMaterial({
+      color:0x101c2c, metalness:0.3, roughness:0.36,
+      emissive:new THREE.Color(COL.cap), emissiveIntensity:0
+    });
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.30, 26, 26), dotMat);
+    dot.position.set(px, 0.0, pz);
+    wspGroup.add(dot);
+    const sp = makeLabel(txt, COL_CSS.cap, 0.74);
+    sp.position.set(px, 0.7, pz);
+    wspGroup.add(sp);
+    NODES['wsp'+i] = { mesh:dot, mat:dotMat, baseColor:new THREE.Color(COL.cap),
+                       target:0, cur:0, sprite:sp, wsp:true };
+  });
+  scene.add(wspGroup);
+}
+
+/* a glowing chain node = sphere core + base color sphere + floating label */
+function makeNode(key, label, color, pos){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshPhysicalMaterial({
+    color:0x101828, metalness:0.35, roughness:0.32, clearcoat:0.6,
+    emissive:new THREE.Color(color), emissiveIntensity:0
+  });
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.95, 3), mat);
+  core.position.copy(pos);
+  g.add(core);
+  // faint halo shell
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(1.35, 32, 32),
+    new THREE.MeshBasicMaterial({ color:color, transparent:true, opacity:0.0, side:THREE.BackSide })
+  );
+  halo.position.copy(pos); g.add(halo);
+  scene.add(g);
+
+  const sprite = makeLabel(label, '#'+color.toString(16).padStart(6,'0'));
+  sprite.position.set(pos.x, pos.y + 1.9, pos.z);
+  scene.add(sprite);
+
+  NODES[key] = { mesh:core, halo, label, target:0, cur:0,
+                 baseColor:new THREE.Color(color), mat, sprite, basePos:pos.clone() };
+}
+
+/* flowing particle stream between two points */
+function makeStream(a, b, ca, cb, name){
+  const COUNT = 26;
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(COUNT*3);
+  const colors = new Float32Array(COUNT*3);
+  const cA = new THREE.Color(ca), cB = new THREE.Color(cb);
+  for (let i=0;i<COUNT;i++){
+    const t = i/(COUNT-1);
+    const c = cA.clone().lerp(cB, t);
+    colors[i*3]=c.r; colors[i*3+1]=c.g; colors[i*3+2]=c.b;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const mat = new THREE.PointsMaterial({ size:0.22, vertexColors:true, transparent:true,
+    opacity:0, blending:THREE.AdditiveBlending, depthWrite:false });
+  const pts = new THREE.Points(geo, mat);
+  scene.add(pts);
+  STREAMS.push({ pts, mat, a:a.clone(), b:b.clone(), count:COUNT, phase:Math.random(), name,
+                 target:0, cur:0 });
+}
+
+/* simple arrow (shaft + head) */
+function makeArrow(from, to, color){
+  const grp = new THREE.Group();
+  const dir = to.clone().sub(from); const len = dir.length();
+  const shaftMat = new THREE.MeshBasicMaterial({ color, transparent:true, opacity:1 });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,len*0.8,10), shaftMat);
+  const head  = new THREE.Mesh(new THREE.ConeGeometry(0.18, len*0.2, 14), shaftMat);
+  shaft.position.y = len*0.4; head.position.y = len*0.9;
+  grp.add(shaft); grp.add(head);
+  grp.position.copy(from);
+  grp.lookAt(to); grp.rotateX(Math.PI/2);
+  return grp;
+}
+
+/* text label as a sprite (crisp at any distance) */
+function makeLabel(text, css, scale=1){
+  const pad=24, fs=44;
+  const cv=document.createElement('canvas'); const ctx=cv.getContext('2d');
+  ctx.font=`700 ${fs}px "Segoe UI",Arial,sans-serif`;
+  const w=Math.ceil(ctx.measureText(text).width)+pad*2;
+  const h=fs+pad*2;
+  cv.width=w; cv.height=h;
+  ctx.font=`700 ${fs}px "Segoe UI",Arial,sans-serif`;
+  ctx.textBaseline='middle'; ctx.textAlign='center';
+  ctx.shadowColor='rgba(0,0,0,.9)'; ctx.shadowBlur=12;
+  ctx.fillStyle=css; ctx.fillText(text, w/2, h/2);
+  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=4; tex.colorSpace=THREE.SRGBColorSpace;
+  const mat=new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false, depthTest:false });
+  const sp=new THREE.Sprite(mat);
+  const s=0.0125*scale; sp.scale.set(w*s, h*s, 1);
+  sp.userData.baseOpacity=1;
+  mat.opacity=0.0;
+  return sp;
+}
+
+function roundedBox(w,h,d,r){
+  // cheap rounded box via BoxGeometry (r unused detail; kept for signature parity)
+  return new THREE.BoxGeometry(w,h,d);
+}
+
+/* =====================================================================
+   THE SCENES - each one sets emissive TARGETS; the loop eases toward them.
+   This is the live-bridge: narrative state -> per-node emissive intensity.
+   ===================================================================== */
+const SCENES = [
+  {
+    accent:COL_CSS.conscience,
+    title:'The AI Era Needs an Investment Conscience',
+    sub:'A thought-leadership framework by Paul',
+    body:`<p>For decades, transformation was about <b>designing and building</b> solutions, because building was expensive.</p>
+          <p>AI just changed the economics. And it exposed a capability most organizations never built: the discipline to govern whether their investments actually create value.</p>
+          <p class="quote">Drag to orbit the model. Use Next to walk the argument, scene by scene.</p>`,
+    light:{ },                 // opening: everything dim, just the title
+    cam:{ pos:[0,6.5,19], tgt:[0,1.8,0] }
+  },
+  {
+    accent:COL_CSS.cap,
+    title:'AI Compresses the Cost of Building',
+    sub:'What changed',
+    body:`<p>Design, build, and test used to be the bottleneck. AI is compressing that middle dramatically.</p>
+          <p>When execution gets cheap, the constraint moves - from <b>building the solution</b> to <b>choosing the right problems and proving value</b>.</p>`,
+    light:{ ai:3.4 },
+    streams:{},
+    cam:{ pos:[0,7.2,17], tgt:[0,4.0,0] }
+  },
+  {
+    accent:COL_CSS.pain,
+    title:'Success Inertia',
+    sub:'Why incumbents struggle',
+    body:`<p>The belief that what worked yesterday will keep working tomorrow. Blockbuster. Kodak. Nokia.</p>
+          <p>It is the Innovator's Dilemma on fast-forward - and AI is the accelerant. What once took 10-20 years to kill a company may now take 3-5.</p>`,
+    light:{ pain:3.0, ai:1.0 },
+    cam:{ pos:[-9,4.5,13], tgt:[-6.5,1.6,0] }
+  },
+  {
+    accent:COL_CSS.invest,
+    title:'The Scarce Skill Shifts',
+    sub:'One claim, three named parts',
+    body:`<p>In the AI era, the scarce executive skill stops being <b>knowing the answers</b> and becomes <b>continuously finding the right problems</b>.</p>
+          <p>That one shift has three named parts - the who, the how, and the why:</p>
+          <div class="chain" style="font-size:13px"><span class="i">Chief Problem Officer</span><span class="arrow">&middot;</span><span class="c">Continuous Recursive Improvement</span><span class="arrow">&middot;</span><span class="v">Business Longevity</span></div>
+          <p style="margin-top:10px">One arc: the owner, the discipline, and the payoff.</p>`,
+    light:{ cpo:3.0, value:1.2 },
+    cam:{ pos:[0,6.0,15], tgt:[0,3.0,0] }
+  },
+  {
+    accent:COL_CSS.conscience,
+    title:'The Spine: Pain to Value',
+    sub:'The substrate the arc rides on',
+    body:`<p>The organization does not buy value directly. It feels <b>pain</b>, allocates <b>investment</b>, builds <b>capability</b>, and that capability should produce <b>value</b>.</p>
+          <div class="chain"><span class="p">Pain</span><span class="arrow">&rarr;</span><span class="i">Investment</span><span class="arrow">&rarr;</span><span class="c">Capability</span><span class="arrow">&rarr;</span><span class="v">Value</span></div>
+          <p style="margin-top:10px">Simple enough to redraw from memory. That is why it spreads. Everything that follows rides on top of this spine.</p>`,
+    light:{ pain:3.0, invest:3.0, cap:3.0, value:3.0 },
+    streams:{ all:1 },
+    cam:{ pos:[0,4.2,16], tgt:[0,1.6,0] }
+  },
+  {
+    accent:COL_CSS.conscience,
+    title:'Investment Conscience',
+    sub:'The conscience and the meter',
+    body:`<p>Think of it as the <b>conscience</b>, and the <b>meter</b>, sitting over the whole chain. It preserves the knowledge: why the pain matters, why the investment was justified, what capability was built, and whether it produced value.</p>
+          <p>It wraps the whole chain - and continuously governs it.</p>
+          <p class="quote">A conscience needs a metabolism. That engine is Continuous Recursive Improvement - same animal, seen as the meter and the engine.</p>`,
+    light:{ pain:2.2, invest:2.2, cap:2.2, value:2.2, conscience:3.4 },
+    streams:{ all:1 },
+    cam:{ pos:[0,9,15], tgt:[0,1.6,0] }
+  },
+  {
+    accent:COL_CSS.invest,
+    title:'The Chief Problem Officer',
+    sub:'The owner (Who)',
+    body:`<p>Every discipline needs an owner. <b>Not Chief Product. Not Chief Procurement.</b> Those are different jobs entirely.</p>
+          <p>The Chief Problem Officer's whole mandate is to keep finding the <b>right problems</b> faster than the competition - and to make sure each one is actually worth solving.</p>
+          <p class="quote">When anyone can build almost anything, the person who decides what is worth building becomes the most valuable seat at the table.</p>`,
+    light:{ cpo:3.4, pain:1.2, invest:1.6, cap:1.0, value:1.0 },
+    streams:{ all:0.5 },
+    cam:{ pos:[0,6.5,14], tgt:[0,3.2,0] }
+  },
+  {
+    accent:COL_CSS.value,
+    title:'The Value Accountability Loop',
+    sub:'How the owner operates',
+    body:`<p>The governance cycle that keeps the chain honest after deployment:</p>
+          <div class="chain" style="font-size:13px"><span style="color:var(--conscience)">Observe &rarr; Learn &rarr; Reprioritize &rarr; Reinvest / Adapt / Retire</span></div>
+          <p style="margin-top:10px">In a startup, this is enforced by survival. The Chief Problem Officer recreates that survival-grade rigor on purpose - the heartbeat of the discipline.</p>`,
+    light:{ pain:1.6, invest:1.6, cap:1.6, value:2.6, conscience:2.8, loop:3.0, cpo:1.4 },
+    streams:{ all:0.7 },
+    cam:{ pos:[0,5.5,16], tgt:[0,-0.4,0] }
+  },
+  {
+    accent:COL_CSS.cap,
+    title:'Continuous Recursive Improvement',
+    sub:'The method (How) - the WSP loop made operational',
+    body:`<p>Here is what <b>recursive</b> actually means, made concrete. It is the Workstream Scoring loop, running on a cadence:</p>
+          <div class="chain" style="font-size:12.5px"><span class="c">D1 Surface &rarr; D2 Map &rarr; D3 Prioritize &rarr; D4/D5 Dependencies &rarr; D6 Sequence &rarr; Re-run</span></div>
+          <p style="margin-top:10px">Next quarter, run the whole loop again on whatever pain is left over. <b>Not a buzzword - a cadence.</b> The package is the proof: the discipline made operational.</p>`,
+    light:{ pain:1.2, invest:1.2, cap:2.6, value:1.6, conscience:2.0, wsp:3.2, recursive:2.4 },
+    streams:{ all:0.8 },
+    cam:{ pos:[0,8.5,15], tgt:[0,1.6,0] }
+  },
+  {
+    accent:COL_CSS.value,
+    title:'Business Longevity',
+    sub:'The payoff (Why) - vitality, not mere survival',
+    body:`<p>Not survival in the defensive sense - white-knuckling one more year. <b>Vitality.</b> A business that keeps killing its own problems <b>compounds</b>.</p>
+          <p>Each turn of the loop leaves it sharper, faster at finding what matters next.</p>
+          <p class="quote">The most dangerous competitor in the AI era is not the one with the best current product. It is the one that gets better at getting better, year after year.</p>`,
+    light:{ pain:1.4, invest:1.4, cap:1.4, value:2.8, conscience:2.6, loop:2.0, wsp:1.6, recursive:3.2 },
+    streams:{ all:1 },
+    cam:{ pos:[0,7,14], tgt:[0,1.0,0] }
+  },
+  {
+    accent:COL_CSS.conscience,
+    title:'From Static Playbook to Living Conscience',
+    sub:'The synthesis - same animal, four angles',
+    body:`<p>The Playbook is a structured array of linked knowledge: pain, investment logic, capability, expected and observed value.</p>
+          <p>The <b>Investment Conscience</b> is the meter over it. <b>Continuous Recursive Improvement</b> is the metabolism. The <b>Chief Problem Officer</b> runs the cadence. <b>Business Longevity</b> is the ten-year payoff.</p>
+          <div class="chain"><span class="p">Pain</span><span class="arrow">&rarr;</span><span class="i">Investment</span><span class="arrow">&rarr;</span><span class="c">Capability</span><span class="arrow">&rarr;</span><span class="v">Value</span></div>
+          <p class="quote">AI will reward organizations that build many things. It will reward even more those that know which things actually matter.</p>`,
+    light:{ pain:2.6, invest:2.6, cap:2.6, value:2.6, conscience:3.4, loop:2.2, wsp:2.0, recursive:2.2, cpo:2.0 },
+    streams:{ all:1.2 },
+    cam:{ pos:[0,9.0,18], tgt:[0,1.6,0] }
+  }
+];
+
+/* ---------- narration: one mp3 + (optional) one lip-sync mp4 per scene ----------
+   Two media sources per scene:
+     - audio:   audio/slide-N.mp3        (always present; the fallback)
+     - lipsync: lipsync/slide-N.mp4      (Nina talking-head; shown when toggle ON)
+   When the lip-sync toggle is ON and a slide's mp4 is available, that scene is
+   narrated by Nina's lip-synced video; otherwise it falls back to audio-only.
+   A single media layer (loadMedia / stopMedia / onMediaEnded) drives BOTH the
+   per-slide play button and narrated-autoplay, so the two modes share one path. */
+const VO  = document.getElementById('vo');     // <audio>
+const VID = document.getElementById('ninaVid'); // <video> (Nina talking head)
+function voSrc(i){  return `audio/slide-${i+1}.mp3`; }
+function vidSrc(i){ return `lipsync/slide-${i+1}.mp4`; }
+
+// per-slide lip-sync availability: undefined=unknown, true/false once probed.
+// A failed video load (404 / stub) marks the slide false and we fall back to audio.
+const lipsyncAvail = {};
+
+// is the lip-sync video the active medium for scene i right now?
+function useVideo(i){ return lipsync && lipsyncAvail[i] !== false; }
+function activeEl(i){ return useVideo(i) ? VID : VO; }
+
+function showNina(on){
+  const w = $('ninaWrap');
+  w.classList.toggle('show', !!on);
+  w.setAttribute('aria-hidden', on ? 'false' : 'true');
+}
+
+// load scene i's narration into the right element and (optionally) play it
+function loadMedia(i, play){
+  if (useVideo(i)){
+    showNina(true);
+    $('ninaWrap').classList.remove('missing');
+    $('ninaCap').textContent = 'Nina - lip-sync narration';
+    try{ VO.pause(); }catch(e){}
+    if (decodeURI(VID.currentSrc||VID.src||'').indexOf(vidSrc(i)) === -1){
+      VID.src = vidSrc(i);
+    }
+    VID.currentTime = 0;
+    if (play){
+      const p = VID.play();
+      if (p && p.catch) p.catch(()=>{ /* gesture-gated until first interaction */ });
+    }
+  } else {
+    // audio path (default, and the fallback when a slide has no/failed video)
+    if (lipsync){ showNina(true); $('ninaWrap').classList.add('missing');
+      $('ninaCap').textContent = 'Audio narration (no video for this scene yet)'; }
+    else showNina(false);
+    try{ VID.pause(); }catch(e){}
+    VO.src = voSrc(i);
+    VO.currentTime = 0;
+    if (play){
+      const p = VO.play();
+      if (p && p.catch) p.catch(()=>{ /* autoplay blocked until a user gesture */ });
+    }
+  }
+}
+function stopMedia(){ try{ VO.pause(); }catch(e){} try{ VID.pause(); }catch(e){} }
+
+// the lip-sync video failed to load for this scene -> remember it, fall back to audio
+VID.addEventListener('error', ()=>{
+  lipsyncAvail[cur] = false;
+  if (lipsync){ loadMedia(cur, autoplay); }   // re-route this scene to audio
+});
+VID.addEventListener('loadeddata', ()=>{ lipsyncAvail[cur] = true; });
+
+// kept for back-compat with any older call sites in this file
+function loadVO(i, play){ loadMedia(i, play); }
+function stopVO(){ stopMedia(); }
+
+/* ---------- scene control ---------- */
+const $ = id => document.getElementById(id);
+
+function goScene(i, instant=false){
+  cur = Math.max(0, Math.min(SCENES.length-1, i));
+  const s = SCENES[cur];
+
+  // ---- set emissive TARGETS (the live bridge) ----
+  Object.keys(NODES).forEach(k=>{
+    let want = 0;
+    if (s.light){
+      if (k.startsWith('loop')) want = s.light.loop || 0;
+      else if (k.startsWith('wsp')) want = s.light.wsp || 0;
+      else if (s.light[k] !== undefined) want = s.light[k];
+    }
+    NODES[k].target = want;
+  });
+  // streams
+  STREAMS.forEach(st=>{
+    st.target = (s.streams && (s.streams.all !== undefined)) ? s.streams.all : 0;
+  });
+  // compression arrows visible only when AI bar is hot
+  const aiHot = (s.light && s.light.ai) ? s.light.ai : 0;
+  STREAMS_ARROWS.forEach(a=> a.userData.aiTarget = aiHot>0 ? 0.65 : 0.06);
+
+  // ---- camera move ----
+  if (s.cam){
+    camFrom = camera.position.clone();
+    camTo   = new THREE.Vector3(...s.cam.pos);
+    camTgtFrom = controls.target.clone();
+    camTgtTo   = new THREE.Vector3(...s.cam.tgt);
+    camT = instant ? 1 : 0;
+    if (instant){ camera.position.copy(camTo); controls.target.copy(camTgtTo); }
+  }
+
+  // ---- update the card ----
+  const card = $('card');
+  document.documentElement.style.setProperty('--accentDyn', s.accent);
+  card.classList.add('swap');
+  setTimeout(()=>{
+    $('sNo').textContent = cur+1; $('sTot').textContent = SCENES.length;
+    $('sTitle').textContent = s.title;
+    $('sSub').textContent = s.sub || '';
+    $('sBody').innerHTML = s.body || '';
+    card.classList.remove('swap');
+  }, instant ? 0 : 220);
+
+  // ---- narration: in narrated-autoplay, play this scene's clip; otherwise just preload it ----
+  if (autoplay) loadVO(cur, true);
+  else { stopVO(); loadVO(cur, false); }
+
+  // ---- rail state ----
+  $('prev').disabled = cur===0;
+  $('next').textContent = cur===SCENES.length-1 ? 'Restart \u21bb' : 'Next \u2192';
+  $('counter').textContent = `${cur+1} / ${SCENES.length}`;
+  renderDots();
+}
+
+function renderDots(){
+  const wrap = $('dots'); wrap.innerHTML='';
+  SCENES.forEach((s,i)=>{
+    const d=document.createElement('div');
+    d.className='dot'+(i===cur?' on':'');
+    d.title=s.title; d.onclick=()=>{ stopAuto(); goScene(i); };
+    wrap.appendChild(d);
+  });
+}
+
+/* ---------- render loop: ease emissive toward targets ---------- */
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  const ease = 1 - Math.pow(0.0025, dt);   // smooth approach
+
+  // ease every node's emissive intensity toward its scene target + gentle pulse
+  Object.keys(NODES).forEach(k=>{
+    const N = NODES[k];
+    N.cur += (N.target - N.cur) * ease;
+    const pulse = 1 + 0.10*Math.sin(t*1.8 + (N.basePos? N.basePos.x:0));
+    const v = N.cur * (N.target>0 ? pulse : 1);
+    if (N.mat) N.mat.emissiveIntensity = v;
+    if (N.halo) N.halo.material.opacity = Math.min(0.32, N.cur*0.12);
+    if (N.sprite){
+      N.sprite.material.opacity += ((N.target>0.05?1:0) - N.sprite.material.opacity) * ease;
+    }
+    // float the spine nodes a touch when lit
+    if (N.basePos && N.mesh){
+      N.mesh.position.y = N.basePos.y + (N.cur>0.1 ? 0.10*Math.sin(t*1.5 + N.basePos.x) : 0);
+      if (N.sprite) N.sprite.position.y = N.basePos.y + 1.9 + (N.cur>0.1 ? 0.10*Math.sin(t*1.5 + N.basePos.x) : 0);
+    }
+  });
+
+  // streams: flow particles and fade opacity toward target
+  STREAMS.forEach(st=>{
+    st.cur += (st.target - st.cur) * ease;
+    st.mat.opacity = Math.min(0.95, st.cur);
+    const pos = st.pts.geometry.attributes.position.array;
+    const flow = (t*0.16 + st.phase) % 1;
+    for (let i=0;i<st.count;i++){
+      let f = (i/(st.count) + flow) % 1;
+      const p = new THREE.Vector3().lerpVectors(st.a, st.b, f);
+      p.y += Math.sin(f*Math.PI)*0.5;            // gentle arc
+      pos[i*3]=p.x; pos[i*3+1]=p.y; pos[i*3+2]=p.z;
+    }
+    st.pts.geometry.attributes.position.needsUpdate = true;
+    st.mat.size = 0.18 + 0.06*Math.sin(t*4 + st.phase*6);
+  });
+
+  // compression arrows fade
+  STREAMS_ARROWS.forEach(a=>{
+    const want = a.userData.aiTarget ?? 0.06;
+    a.traverse(m=>{ if(m.material){ m.material.opacity += (want - m.material.opacity)*ease; }});
+  });
+
+  // conscience ring slow rotation while lit; loop group counter-rotate
+  if (NODES.conscience.cur > 0.1) consciousRing.rotation.z += dt*0.10;
+  if (NODES.loop0 && NODES.loop0.cur > 0.1) loopGroup.rotation.y += dt*0.18;
+  if (NODES.recursive.cur > 0.1) NODES.recursive.mesh.rotation.z -= dt*0.22;
+  // WSP loop spins to show the cadence "running" while the recursive scene is lit
+  if (NODES.wsp0 && NODES.wsp0.cur > 0.1) wspGroup.rotation.y += dt*0.30;
+  // the Chief Problem Officer gem turns gently when it owns the scene
+  if (NODES.cpo && NODES.cpo.cur > 0.1) NODES.cpo.mesh.rotation.y += dt*0.5;
+
+  // bloom strength tracks how much is lit (more lit = more glow, capped)
+  let litSum = 0; Object.keys(NODES).forEach(k=> litSum += NODES[k].cur);
+  bloom.strength = 0.7 + Math.min(0.9, litSum*0.045);
+
+  // camera tween
+  if (camT < 1){
+    camT = Math.min(1, camT + dt*0.9);
+    const e = camT<.5 ? 2*camT*camT : 1-Math.pow(-2*camT+2,2)/2; // easeInOutQuad
+    camera.position.lerpVectors(camFrom, camTo, e);
+    controls.target.lerpVectors(camTgtFrom, camTgtTo, e);
+  }
+
+  controls.autoRotate = autorotate && camT>=1;
+  controls.update();
+  composer.render();
+}
+
+function onResize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h); composer.setSize(w, h);
+  bloom.setSize(w, h);
+}
+
+/* ---------- UI wiring ---------- */
+$('next').onclick = ()=>{ stopAuto(); if (cur>=SCENES.length-1) goScene(0); else goScene(cur+1); };
+$('prev').onclick = ()=>{ stopAuto(); goScene(cur-1); };
+$('btnRotate').onclick = (e)=>{ autorotate=!autorotate; e.target.classList.toggle('on',autorotate);
+  e.target.textContent = 'Auto-orbit: '+(autorotate?'on':'off'); };
+$('btnAuto').onclick = ()=>{ autoplay?stopAuto():startAuto(); };
+
+// lip-sync toggle: ON => Nina narrates each scene as a lip-synced talking-head video
+// (autoplay + per-slide), with audio-only as the per-scene fallback. OFF => audio-only.
+$('btnLipsync').onclick = (e)=>{
+  lipsync = !lipsync;
+  e.target.classList.toggle('on', lipsync);
+  e.target.textContent = 'Lip-sync video: ' + (lipsync ? 'on' : 'off');
+  const wasPlaying = (!VO.paused && !VO.ended) || (!VID.paused && !VID.ended);
+  stopMedia();
+  // swap this scene to the newly-selected medium; resume if we were mid-narration
+  loadMedia(cur, wasPlaying || autoplay);
+};
+
+// per-slide play/pause button: hear/see THIS scene on demand (works in both modes)
+$('playSlide').onclick = ()=>{
+  const el = activeEl(cur);
+  if (!el.paused && !el.ended){ stopMedia(); return; }   // toggle off if playing
+  loadMedia(cur, true);
+};
+
+// a single handler reused for both <audio> and <video>: reflect button state +
+// drive narrated-autoplay advance when whichever medium is playing finishes.
+function bindMedia(el){
+  el.addEventListener('play',  ()=>{ $('playSlide').classList.add('playing');  $('playSlide').innerHTML='&#10073;&#10073;'; });
+  el.addEventListener('pause', ()=>{ $('playSlide').classList.remove('playing'); $('playSlide').innerHTML='&#9654;'; });
+  el.addEventListener('ended', ()=>{
+    $('playSlide').classList.remove('playing'); $('playSlide').innerHTML='&#9654;';
+    // narrated-autoplay: advance to the next scene when this scene's clip finishes
+    if (autoplay){
+      if (cur >= SCENES.length-1){ stopAuto(); }   // reached the end: stop cleanly
+      else { goScene(cur+1); }                     // goScene auto-plays the next clip
+    }
+  });
+}
+bindMedia(VO);
+bindMedia(VID);
+
+/* narrated autoplay: play scene-by-scene, advancing when each clip ends.
+   Honors the lip-sync toggle automatically via loadMedia/activeEl. */
+function startAuto(){
+  autoplay = true;
+  $('btnAuto').classList.add('on');
+  $('btnAuto').innerHTML = 'Stop narration &#9632;';
+  // (re)start from the current scene and play its clip (video or audio)
+  loadMedia(cur, true);
+}
+function stopAuto(){
+  autoplay = false;
+  stopMedia();
+  $('btnAuto').classList.remove('on');
+  $('btnAuto').innerHTML = 'Play narrated &#9654;';
+}
+
+window.addEventListener('keydown', e=>{
+  if (e.key==='ArrowRight' || e.key===' '){ e.preventDefault(); stopAuto(); if(cur>=SCENES.length-1)goScene(0);else goScene(cur+1); }
+  if (e.key==='ArrowLeft'){ e.preventDefault(); stopAuto(); goScene(cur-1); }
+});
+
+// fade out the loader once the first frame is up
+requestAnimationFrame(()=> requestAnimationFrame(()=>{
+  const l=$('loading'); if(l){ l.classList.add('gone'); setTimeout(()=>l.remove(), 700); }
+}));
+
+/* ---------- bootstrap (runs last: every const/let above is now initialized) ---------- */
+init();
+buildScene();
+animate();
+goScene(0, true);
+</script>
+</body>
+</html>
