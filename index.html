@@ -920,11 +920,15 @@ function mobileFrame(pos, tgt){
   // The 3D scene occupies roughly the top ~54vh on the mobile bottom-sheet layout, so
   // the effective render aspect is wider than the window aspect - factor stays modest.
   const aspect = window.innerWidth / window.innerHeight;
-  // portrait phone ~0.46 aspect -> ~1.42x; near-square -> ~1.28x; landscape -> ~1.18x
-  const widen  = aspect < 0.6 ? 1.42
-               : aspect < 0.9 ? 1.34
-               : aspect < 1.2 ? 1.28
-               : 1.18;
+  // portrait phone ~0.46 aspect -> ~1.58x; near-square -> ~1.46x; landscape -> ~1.26x
+  // Bumped a notch (was 1.42 / 1.34 / 1.28 / 1.18) per Paul's "zooming out a bit
+  // might actually help" - combined with the visible-band view-offset below, this
+  // lets the WHOLE structure (node + sphere ring + green VALUE node) sit in frame
+  // at once in the band above the bottom-sheet card.
+  const widen  = aspect < 0.6 ? 1.58
+               : aspect < 0.9 ? 1.46
+               : aspect < 1.2 ? 1.32
+               : 1.26;
   let newDist  = dist * widen;
   // never pull farther than the user could zoom out to anyway
   if (controls && controls.maxDistance) newDist = Math.min(newDist, controls.maxDistance);
@@ -986,6 +990,10 @@ function goScene(i, instant=false){
     $('sSub').textContent = s.sub || '';
     $('sBody').innerHTML = s.body || '';
     card.classList.remove('swap');
+    // MOBILE-ONLY: the bottom-sheet card's height varies per scene (different body
+    // copy), so re-measure the visible band and recompose the camera for it after
+    // the content swaps in. No-op on desktop (applyMobileViewOffset is MOBILE-gated).
+    if (MOBILE) applyMobileViewOffset(window.innerWidth, window.innerHeight);
   }, instant ? 0 : 220);
 
   // ---- narration: in narrated-autoplay, play this scene's clip; otherwise just preload it ----
@@ -1094,11 +1102,53 @@ function animate(){
   composer.render();
 }
 
+/* MOBILE-ONLY: vertically center the 3D composition within the VISIBLE band
+   (the part of the screen ABOVE the bottom-sheet card), not the full viewport.
+
+   On the mobile bottom-sheet layout the #card overlays the lower ~46vh of the
+   screen, so a composition centered on the full viewport has its lower half
+   hidden behind the card - leaving the visible content floating high with a band
+   of dead black space. We fix this with camera.setViewOffset() and ZERO change to
+   the authored camera position / target / look: we keep the full FOV (viewW=w,
+   viewH=h, no zoom) and only PAN the framing DOWN by a fraction of the occluded
+   (card) height. Panning the framing down lifts the structure UP on screen, so it
+   rises out from behind the card and composes into the visible band - the node,
+   the ring of spheres, and the green VALUE node all land in the space above the
+   card instead of floating high with dead black space.
+
+   Why a positive Y offset with full view size (not a shrunk sub-rect): a shrunk
+   sub-rect (viewH<h) would ZOOM into the top band and magnify it; what we want is
+   the SAME framing shifted upward. setViewOffset(w,h, 0, +panY, w, h) pans the
+   virtual frame down by panY px, which moves the rendered content up by panY - a
+   pure vertical recompose with no scale change.
+
+   The pan fraction (0.42) re-centers the authored look-at into the visible band
+   without over-lifting (0.5 = exact target-center, but the authored art carries
+   visual mass above the look-at on several scenes, so 0.42 reads better across the
+   deck). Self-measuring: we read the card's real top edge each call so the pan
+   auto-adjusts to the card's actual height per scene / orientation. Desktop never
+   calls this (gated behind MOBILE), so desktop projection is byte-for-byte the
+   authored one. */
+function applyMobileViewOffset(w, h){
+  if (!MOBILE){ camera.clearViewOffset(); return; }
+  const card = document.getElementById('card');
+  let occluded = h * 0.46;             // fallback: card is ~46vh if not measurable yet
+  if (card){
+    const top = card.getBoundingClientRect().top;   // px from viewport top to card
+    if (isFinite(top) && top > 0 && top < h) occluded = h - top;
+  }
+  const panY = occluded * 0.42;        // pan framing down -> structure rises into band
+  camera.clearViewOffset();
+  camera.setViewOffset(w, h, 0, panY, w, h);
+}
+
 function onResize(){
   const w = window.innerWidth, h = window.innerHeight;
   camera.aspect = w/h; camera.updateProjectionMatrix();
   renderer.setSize(w, h); composer.setSize(w, h);
   if (bloom) bloom.setSize(w, h);
+  // MOBILE-ONLY: recompose for the visible band above the bottom-sheet card.
+  applyMobileViewOffset(w, h);
 }
 
 /* ---------- UI wiring ---------- */
