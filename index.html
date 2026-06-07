@@ -258,7 +258,7 @@
   <!-- Nina lip-synced talking-head panel: shown only when lip-sync video is ON -->
   <div id="ninaWrap" aria-hidden="true">
     <video id="ninaVid" preload="none" playsinline poster="posters/nina-poster.jpg"></video>
-    <div id="ninaCap">Nina &middot; lip-sync narration</div>
+    <div id="ninaCap">Nina Vale</div>
   </div>
 
   <div id="card">
@@ -838,7 +838,7 @@ function loadMedia(i, play){
   if (useVideo(i)){
     showNina(true);
     $('ninaWrap').classList.remove('missing');
-    $('ninaCap').textContent = 'Nina - lip-sync narration';
+    $('ninaCap').textContent = 'Nina Vale';
     try{ VO.pause(); }catch(e){}
     if (decodeURI(VID.currentSrc||VID.src||'').indexOf(vidSrc(i)) === -1){
       VID.src = vidSrc(i);
@@ -902,6 +902,35 @@ function stopVO(){ stopMedia(); }
 /* ---------- scene control ---------- */
 const $ = id => document.getElementById(id);
 
+/* MOBILE-ONLY camera re-framing (issue 2).
+   Given an authored camera position `pos` looking at `tgt`, return a NEW position
+   pulled back along the same view vector so labels are readable on a narrow phone
+   screen at the default framing - no manual zoom required. Desktop never calls this
+   (gated behind MOBILE at the call site), so desktop framing is byte-for-byte the
+   authored composition.
+
+   The pull-back factor adapts to the live viewport aspect: a tall portrait phone
+   clips wide ALL-CAPS labels first, so it gets a stronger dolly-back; a wide/landscape
+   phone gets less. We clamp the resulting distance to the OrbitControls maxDistance
+   so the pull-back can never exceed what the user could reach by zooming out anyway. */
+function mobileFrame(pos, tgt){
+  const offset = pos.clone().sub(tgt);          // authored view vector (dir + distance)
+  const dist   = offset.length();
+  // Aspect-aware widen: portrait (aspect<1) gets the most pull-back; ~1.0 a touch less.
+  // The 3D scene occupies roughly the top ~54vh on the mobile bottom-sheet layout, so
+  // the effective render aspect is wider than the window aspect - factor stays modest.
+  const aspect = window.innerWidth / window.innerHeight;
+  // portrait phone ~0.46 aspect -> ~1.42x; near-square -> ~1.28x; landscape -> ~1.18x
+  const widen  = aspect < 0.6 ? 1.42
+               : aspect < 0.9 ? 1.34
+               : aspect < 1.2 ? 1.28
+               : 1.18;
+  let newDist  = dist * widen;
+  // never pull farther than the user could zoom out to anyway
+  if (controls && controls.maxDistance) newDist = Math.min(newDist, controls.maxDistance);
+  return tgt.clone().add(offset.normalize().multiplyScalar(newDist));
+}
+
 function goScene(i, instant=false){
   cur = Math.max(0, Math.min(SCENES.length-1, i));
   const s = SCENES[cur];
@@ -930,6 +959,19 @@ function goScene(i, instant=false){
     camTo   = new THREE.Vector3(...s.cam.pos);
     camTgtFrom = controls.target.clone();
     camTgtTo   = new THREE.Vector3(...s.cam.tgt);
+    // MOBILE-ONLY re-framing: pull the camera back along its authored view vector
+    // so each scene's label(s) (e.g. the Chief Problem Officer node label) are
+    // fully readable at the DEFAULT framing - the user should never have to pinch
+    // to zoom out to read a label. Desktop framing is UNTOUCHED: this whole branch
+    // is gated behind MOBILE, so on desktop camTo/camTgtTo stay exactly as authored.
+    // We keep the authored look-at point and view angle; only the distance grows,
+    // which preserves each scene's composition while widening the field to fit the
+    // narrow phone aspect ratio. The portrait viewport is much taller-than-wide, so
+    // horizontal label runs (the long ALL-CAPS sprites) clip first - the pull-back
+    // is what makes them legible without manual zoom.
+    if (MOBILE){
+      camTo = mobileFrame(camTo, camTgtTo);
+    }
     camT = instant ? 1 : 0;
     if (instant){ camera.position.copy(camTo); controls.target.copy(camTgtTo); }
   }
@@ -1164,21 +1206,34 @@ function initMobile(){
   };
   gate.addEventListener('click', unlock, { once:false });
 
-  // --- Horizontal swipe -> goScene(+/-1). Vertical gestures are left to the card's
-  // own scroll (touch-action:pan-y is not set on the card; the sheet scrolls
-  // natively). We only act on a clearly-horizontal swipe on the stage area. ---
-  const stage = $('stage');
+  // --- Swipe navigation -> goScene(+/-1), but ONLY on the narrative card (the
+  // non-canvas bottom sheet). The 3D canvas is ORBIT-ONLY: a drag on the canvas
+  // rotates the model and NEVER changes slides or interrupts narration.
+  //
+  // Why this changed: the swipe listener used to live on #stage (the full-screen
+  // canvas container), so every horizontal orbit-drag exceeding 60px fired
+  // stopAuto()+goScene() - which killed Nina's narration and jumped slides the
+  // instant the user tried to rotate the model. Moving swipe nav onto #card only
+  // fully decouples 3D interaction from the narration/autoplay lifecycle: the
+  // canvas can be orbited/zoomed/panned freely while narration keeps playing and
+  // autoplay keeps advancing on its own. ---
+  const swipeZone = $('card');
   let sx=0, sy=0, tracking=false;
-  stage.addEventListener('touchstart', (e)=>{
+  swipeZone.addEventListener('touchstart', (e)=>{
     if (e.touches.length !== 1){ tracking=false; return; }
     sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking=true;
   }, { passive:true });
-  stage.addEventListener('touchend', (e)=>{
+  swipeZone.addEventListener('touchend', (e)=>{
     if (!tracking) return; tracking=false;
     const t = e.changedTouches[0];
     const dx = t.clientX - sx, dy = t.clientY - sy;
+    // Clearly-horizontal swipe on the card area = slide nav. (The card scrolls
+    // vertically on its own; a vertical drag is left to native scroll.) This
+    // navigation deliberately does NOT call stopAuto(): advancing a slide by
+    // swipe lets the new scene's narration play, consistent with Next/Prev being
+    // the only explicit narration-affecting controls. A canvas drag never reaches
+    // here, so orbiting the model can never navigate or interrupt narration.
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)*1.5){
-      stopAuto();
       if (dx < 0){ if (cur>=SCENES.length-1) goScene(0); else goScene(cur+1); }
       else { goScene(cur-1); }
     }
