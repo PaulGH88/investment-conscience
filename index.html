@@ -1177,7 +1177,9 @@ function animate(){
     const FR = MOBILE ? FOG_RAMP.mobile : FOG_RAMP.desktop;
     const curDist = camera.position.distanceTo(controls.target);
     const excess  = curDist - (framedDist + FR.freeMargin);
-    const k = Math.max(0, Math.min(1, excess / FR.rampSpan)); // 0 = bright, 1 = full dim
+    // RULE (Paul 2026-06-07): NO dimming on mobile, ever. k pinned to 0 so mobile fog
+    // stays at the authored bright window (16/52) at every zoom. Desktop keeps the ramp.
+    const k = MOBILE ? 0 : Math.max(0, Math.min(1, excess / FR.rampSpan)); // 0 = bright, 1 = full dim
     // At k=0 the window is exactly the authored static (16/52). As k->1 we pull near
     // and far inward toward the camera so the geometry sits deeper in the fog. On
     // desktop that bottoms out at 4/22 (a real dim); on mobile it bottoms out at the
