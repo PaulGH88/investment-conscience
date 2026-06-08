@@ -392,9 +392,28 @@ let camFrom=null, camTo=null, camTgtFrom=null, camTgtTo=null, camT=1;
    slide once the camera settles at its (mobile-adjusted) framing. */
 const FOG_NEAR_BASE = 16;     // authored static fog near (full clarity inside this)
 const FOG_FAR_BASE  = 52;     // authored static fog far  (faded to bg by here)
-const FOG_FREE_MARGIN = 6;    // stay fully bright from framedDist out to +this much
-const FOG_RAMP_SPAN   = 18;   // over this much further pull-back, ramp to full dim
 let framedDist = 16;          // current slide's framed camera-to-target distance
+
+/* --- fog ramp profile: DESKTOP vs MOBILE -----------------------------------
+   Desktop keeps the original, well-liked behavior: a modest free margin, an
+   18-unit ramp, and a deep max-dim window (near 16->4, far 52->22) so pulling
+   WAY back genuinely dims the model. Paul likes this - do NOT touch it.
+
+   Mobile is a different animal. The mobile default framing is already pulled
+   back (mobileFrame() dollies the camera out to fit labels on a narrow phone),
+   so a normal "fit the whole model" zoom-out lands well inside the OLD ramp and
+   the OLD deep target (near 4 / far 22) nearly blacks the model out. The fix is
+   mobile-only and deliberately a WHISPER:
+     - FREE_MARGIN huge  -> stay at authored brightness across the whole practical
+                            zoom range, including fully zoomed out to fit the model.
+     - RAMP_SPAN long    -> any deepening past that is gradual, never a hard step.
+     - MAX-DIM capped near the authored window (near 16->14, far 52->46) so even
+       fully ramped it is only a hair darker than authored 16/52 - never black.
+   Desktop reads FOG_RAMP.desktop; the MOBILE-gated render path reads FOG_RAMP.mobile. */
+const FOG_RAMP = {
+  desktop: { freeMargin:6,  rampSpan:18, dimNear:4,  dimFar:22 }, // UNCHANGED from before
+  mobile:  { freeMargin:26, rampSpan:40, dimNear:14, dimFar:46 }  // whisper-only dim
+};
 
 function init(){
   const canvas = document.getElementById('gl');
@@ -1019,7 +1038,7 @@ function goScene(i, instant=false){
       camTo = mobileFrame(camTo, camTgtTo);
     }
     // Anchor the distance-fog to THIS slide's framed view: the fog stays at its
-    // authored static window from here out to FOG_FREE_MARGIN, then ramps to dim.
+    // authored static window from here out to the profile's free margin, then ramps.
     // Captured AFTER the mobile re-frame so the (farther) mobile default also reads
     // bright; desktop framedDist == the authored camera distance, so its fog window
     // is unchanged at the authored view.
@@ -1151,15 +1170,20 @@ function animate(){
   // when the user zooms WAY out. Because the anchor (framedDist) is captured AFTER
   // the mobile re-frame, the (farther) mobile default reads BRIGHT just like desktop;
   // and at the desktop authored framing the excess is negative -> static fog ->
-  // identical to before. Beyond framedDist + FOG_FREE_MARGIN the fog tightens.
+  // identical to before. Beyond framedDist + the profile's free margin it tightens.
   if (scene.fog){
+    // Pick the ramp profile by device: desktop = the original deep dim (unchanged);
+    // mobile = whisper-only (wide free margin, long span, max-dim capped near authored).
+    const FR = MOBILE ? FOG_RAMP.mobile : FOG_RAMP.desktop;
     const curDist = camera.position.distanceTo(controls.target);
-    const excess  = curDist - (framedDist + FOG_FREE_MARGIN);
-    const k = Math.max(0, Math.min(1, excess / FOG_RAMP_SPAN)); // 0 = bright, 1 = full dim
+    const excess  = curDist - (framedDist + FR.freeMargin);
+    const k = Math.max(0, Math.min(1, excess / FR.rampSpan)); // 0 = bright, 1 = full dim
     // At k=0 the window is exactly the authored static (16/52). As k->1 we pull near
-    // and far inward toward the camera so the geometry sits deep in the fog and dims.
-    const targetNear = FOG_NEAR_BASE - k * (FOG_NEAR_BASE - 4);   // 16 -> 4
-    const targetFar  = FOG_FAR_BASE  - k * (FOG_FAR_BASE  - 22);  // 52 -> 22
+    // and far inward toward the camera so the geometry sits deeper in the fog. On
+    // desktop that bottoms out at 4/22 (a real dim); on mobile it bottoms out at the
+    // capped 14/46 (a whisper darker than authored, never near-black).
+    const targetNear = FOG_NEAR_BASE - k * (FOG_NEAR_BASE - FR.dimNear);
+    const targetFar  = FOG_FAR_BASE  - k * (FOG_FAR_BASE  - FR.dimFar);
     // ease the fog window so a quick zoom doesn't snap the dim on/off
     scene.fog.near += (targetNear - scene.fog.near) * ease;
     scene.fog.far  += (targetFar  - scene.fog.far ) * ease;
