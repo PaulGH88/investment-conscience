@@ -251,7 +251,7 @@
 
   <div id="tools">
     <button id="btnRotate" type="button">Auto-orbit: off</button>
-    <button id="btnLipsync" type="button">Lip-sync video: off</button>
+    <button id="btnLipsync" type="button">Nina: off</button>
     <button id="btnAuto" type="button">Play narrated &#9654;</button>
   </div>
 
@@ -1269,7 +1269,7 @@ $('btnAuto').onclick = ()=>{ autoplay?stopAuto():startAuto(); };
 $('btnLipsync').onclick = (e)=>{
   lipsync = !lipsync;
   e.target.classList.toggle('on', lipsync);
-  e.target.textContent = 'Lip-sync video: ' + (lipsync ? 'on' : 'off');
+  e.target.textContent = 'Nina: ' + (lipsync ? 'on' : 'off');
   const wasPlaying = (!VO.paused && !VO.ended) || (!VID.paused && !VID.ended);
   stopMedia();
   // swap this scene to the newly-selected medium; resume if we were mid-narration
