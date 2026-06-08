@@ -363,6 +363,13 @@ const REDUCED   = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
 // "Mobile profile" = the constrained path. Strictly additive: a wide desktop
 // with a fine pointer is never in it, so its render path is byte-for-byte the old one.
 const MOBILE = IS_TOUCH && (IS_SMALL || LOW_POWER);
+// Bloom render-target downscale on the mobile profile: the UnrealBloom pass renders +
+// blurs its OWN target every frame, which is the pass's main fill cost. Rendering that
+// target at half resolution (0.5) roughly quarters its pixel work while a soft glow halo
+// reads near-identically (bloom is a blur - the high-frequency detail it would lose is
+// exactly what it throws away anyway). Low-power phones drop to 0.4 for more headroom.
+// Desktop is never affected (this is only read inside MOBILE-gated resize code).
+const BLOOM_RES_SCALE = LOW_POWER ? 0.4 : 0.5;
 let mediaUnlocked = !IS_TOUCH;   // desktop is unlocked from the start (autoplay works)
 
 // reused scratch vector for the per-frame particle loop (avoids allocating a new
@@ -450,11 +457,24 @@ function init(){
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   // threshold 1.05: only HDR-bright emissive nodes bloom; the dim body stays crisp.
-  // Desktop ALWAYS gets full bloom. On the constrained mobile profile we skip the
-  // UnrealBloom pass (its biggest single GPU cost) - the scene still reads, just
-  // without the glow halo. bloom stays null there; every bloom.* use is guarded.
+  // Desktop ALWAYS gets full bloom. Mobile NOW also gets bloom (the glow IS the bloom -
+  // it was the one perf cut that changed the look, so we put it back) but at a REDUCED
+  // bloom render-target resolution (half-res, set in onResize via BLOOM_RES_SCALE) plus
+  // slightly softened strength/radius, so the glow reads like desktop while keeping the
+  // pass's fill-cost in budget on a phone GPU. The half-res render target is the big
+  // saving; UnrealBloom blurs its target either way, so half-res reads near-identically
+  // for a soft bloom halo. Every other mobile perf win (dpr cap, offscreen render-pause,
+  // reused scratch vector, lazy media) is untouched - those don't affect the look.
+  // bloom args: (resolution, strength, radius, threshold). resolution here is a seed;
+  // onResize sets the real (scaled) size. Threshold stays 1.05 on both so only the same
+  // HDR-bright emissive nodes bloom.
   if (!MOBILE){
     bloom = new UnrealBloomPass(new THREE.Vector2(1,1), 1.05, 0.55, 1.05);
+    composer.addPass(bloom);
+  } else {
+    // mobile: a touch less strength + slightly tighter radius to offset the softer
+    // half-res target reading a hair hotter/wider, so it matches desktop's glow weight.
+    bloom = new UnrealBloomPass(new THREE.Vector2(1,1), 0.95, 0.50, 1.05);
     composer.addPass(bloom);
   }
 
@@ -1194,7 +1214,19 @@ function onResize(){
   const w = window.innerWidth, h = window.innerHeight;
   camera.aspect = w/h; camera.updateProjectionMatrix();
   renderer.setSize(w, h); composer.setSize(w, h);
-  if (bloom) bloom.setSize(w, h);
+  // Desktop: full-resolution bloom target (unchanged). Mobile: a reduced-resolution
+  // bloom target (BLOOM_RES_SCALE) - the cheap way to keep the glow while cutting the
+  // pass's fill-cost. The scene/composer still render at full size; only the bloom's
+  // internal blur pyramid works at the smaller size, then upsamples back over the frame.
+  if (bloom){
+    if (MOBILE){
+      const bw = Math.max(1, Math.round(w * BLOOM_RES_SCALE));
+      const bh = Math.max(1, Math.round(h * BLOOM_RES_SCALE));
+      bloom.setSize(bw, bh);
+    } else {
+      bloom.setSize(w, h);
+    }
+  }
   // MOBILE-ONLY: recompose for the visible band above the bottom-sheet card.
   applyMobileViewOffset(w, h);
 }
