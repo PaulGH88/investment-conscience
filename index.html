@@ -104,6 +104,12 @@
   }
   #tools button:hover{color:var(--ink); border-color:var(--conscience);}
   #tools button.on{color:#150a26; background:var(--conscience); border-color:var(--conscience);}
+  /* desktop: Nina face avatar inline before the "Nina:" label */
+  #btnLipsync::before{
+    content:""; display:inline-block; vertical-align:middle;
+    width:17px; height:17px; border-radius:50%; margin:-2px 7px 0 0;
+    background:url("posters/nina-face.png") center/cover;
+  }
 
   /* ---- Nina lip-sync talking-head panel (shown only when lip-sync video is ON) ---- */
   #ninaWrap{
@@ -177,7 +183,7 @@
     }
     #tools button::before{ font-size:15px; line-height:1; }
     #btnRotate::before{ content:"\21bb"; }     /* orbit glyph */
-    #btnLipsync::before{ content:""; width:24px; height:24px; border-radius:50%; background:url("posters/nina-face.png") center/cover; display:inline-block; }    /* Nina face avatar */
+    #btnLipsync::before{ content:""; width:24px; height:24px; border-radius:50%; margin:0; background:url("posters/nina-face.png") center/cover; display:inline-block; }    /* Nina face avatar */
     #btnAuto::before{ content:"\25B6"; }        /* play triangle */
     #btnAuto.on::before{ content:"\25A0"; }     /* stop square when narrating */
 
