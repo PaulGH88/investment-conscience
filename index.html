@@ -256,9 +256,9 @@
   </div>
 
   <div id="tools">
-    <button id="btnRotate" type="button">Auto-orbit: off</button>
+    <button id="btnRotate" type="button" class="on">Auto-orbit: on</button>
     <button id="btnLipsync" type="button">Nina: off</button>
-    <button id="btnAuto" type="button">Play narrated &#9654;</button>
+    <button id="btnAuto" type="button" class="on">Stop narration &#9632;</button>
   </div>
 
   <!-- Nina lip-synced talking-head panel: shown only when lip-sync video is ON -->
@@ -343,7 +343,7 @@ const NODES = {};          // named glowing elements: {mesh, label, target, cur,
 const STREAMS = [];        // flowing connector particles between chain nodes
 const STREAMS_ARROWS = []; // AI-compression arrows (declared before buildScene uses it)
 let consciousRing, aiBar, loopGroup, wspGroup;
-let autorotate = false, autoplay = false;
+let autorotate = true, autoplay = true;   // defaults: auto-orbit ON + auto-narration ON
 let lipsync = false;   // lip-sync video narration toggle (Nina talking-head per scene)
 
 /* ---------------------------------------------------------------------------
@@ -1413,6 +1413,17 @@ buildScene();
 requestFrame();   // starts the (now pause-aware) render loop
 goScene(0, true);
 initMobile();     // tap-gate + swipe + media prefetch wiring (all no-ops on desktop)
+
+// auto-narration default-on: goScene(0) above already starts narration on desktop
+// (unlocked from the start). Safety net: if a fresh browser still gates audio
+// autoplay, start it on the first pointerdown. No-op if narration is already playing.
+if (!IS_TOUCH){
+  const _autoNarrationKick = ()=>{
+    window.removeEventListener('pointerdown', _autoNarrationKick);
+    if (autoplay && activeEl(cur).paused){ loadMedia(cur, true); }
+  };
+  window.addEventListener('pointerdown', _autoNarrationKick);
+}
 </script>
 </body>
 </html>
