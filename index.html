@@ -374,6 +374,21 @@ const _scratch = new THREE.Vector3();
 let cur = 0;
 let camFrom=null, camTo=null, camTgtFrom=null, camTgtTo=null, camT=1;
 
+/* --- distance-fog "dim on pull-back" anchoring -------------------------------
+   The dim-when-you-zoom-out effect is the scene fog. We want it to STAY OFF at
+   each slide's default/framed view (desktop authored framing AND the now-farther
+   mobile framing) and only engage when the user deliberately zooms WAY past it.
+   We do that by making the fog window RELATIVE to the slide's framed camera
+   distance: at/inside the framed distance (plus a comfortable margin) the fog
+   keeps its authored static window (16/52); only beyond that margin does it ramp
+   tighter (pull near+far inward) so the model dims. framedDist is captured per
+   slide once the camera settles at its (mobile-adjusted) framing. */
+const FOG_NEAR_BASE = 16;     // authored static fog near (full clarity inside this)
+const FOG_FAR_BASE  = 52;     // authored static fog far  (faded to bg by here)
+const FOG_FREE_MARGIN = 6;    // stay fully bright from framedDist out to +this much
+const FOG_RAMP_SPAN   = 18;   // over this much further pull-back, ramp to full dim
+let framedDist = 16;          // current slide's framed camera-to-target distance
+
 function init(){
   const canvas = document.getElementById('gl');
   renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
@@ -390,6 +405,12 @@ function init(){
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x05070d);
+  // Distance fog = the "dim when you pull back" effect. Authored static window is
+  // near=16 / far=52 (full clarity at 16, faded to bg by 52). We keep this EXACT
+  // window at every slide's default/framed view (see FOG_NEAR_BASE/FOG_FAR_BASE +
+  // the relative-to-framed ramp in animate()), so the dim only engages when the
+  // user deliberately zooms WAY past the framed distance - on BOTH desktop and the
+  // (now-farther) mobile default framing.
   scene.fog = new THREE.Fog(0x05070d, 16, 52);
 
   // free PBR realism from a procedural environment, kept dim so the lit nodes pop
@@ -455,8 +476,9 @@ function init(){
     }, { threshold:0 }).observe(canvas);
   }
 
-  // expose for live tuning
-  window.__IC = { THREE, scene, camera, controls, NODES, goScene };
+  // expose for live tuning + verification (MOBILE path flag + fog anchor read-only)
+  window.__IC = { THREE, scene, camera, controls, NODES, goScene,
+                  get MOBILE(){ return MOBILE; }, get framedDist(){ return framedDist; } };
 }
 
 /* ---------- build the world: the chain + the conscience + AI bar + loop ---- */
@@ -976,6 +998,12 @@ function goScene(i, instant=false){
     if (MOBILE){
       camTo = mobileFrame(camTo, camTgtTo);
     }
+    // Anchor the distance-fog to THIS slide's framed view: the fog stays at its
+    // authored static window from here out to FOG_FREE_MARGIN, then ramps to dim.
+    // Captured AFTER the mobile re-frame so the (farther) mobile default also reads
+    // bright; desktop framedDist == the authored camera distance, so its fog window
+    // is unchanged at the authored view.
+    framedDist = camTo.distanceTo(camTgtTo);
     camT = instant ? 1 : 0;
     if (instant){ camera.position.copy(camTo); controls.target.copy(camTgtTo); }
   }
@@ -1095,6 +1123,26 @@ function animate(){
     const e = camT<.5 ? 2*camT*camT : 1-Math.pow(-2*camT+2,2)/2; // easeInOutQuad
     camera.position.lerpVectors(camFrom, camTo, e);
     controls.target.lerpVectors(camTgtFrom, camTgtTo, e);
+  }
+
+  // ---- distance fog "dim on pull-back", anchored to the slide's framed view ----
+  // Keep the authored static fog window (16/52) at the default/framed view and for
+  // a comfortable margin past it, then ramp the window inward so the model dims only
+  // when the user zooms WAY out. Because the anchor (framedDist) is captured AFTER
+  // the mobile re-frame, the (farther) mobile default reads BRIGHT just like desktop;
+  // and at the desktop authored framing the excess is negative -> static fog ->
+  // identical to before. Beyond framedDist + FOG_FREE_MARGIN the fog tightens.
+  if (scene.fog){
+    const curDist = camera.position.distanceTo(controls.target);
+    const excess  = curDist - (framedDist + FOG_FREE_MARGIN);
+    const k = Math.max(0, Math.min(1, excess / FOG_RAMP_SPAN)); // 0 = bright, 1 = full dim
+    // At k=0 the window is exactly the authored static (16/52). As k->1 we pull near
+    // and far inward toward the camera so the geometry sits deep in the fog and dims.
+    const targetNear = FOG_NEAR_BASE - k * (FOG_NEAR_BASE - 4);   // 16 -> 4
+    const targetFar  = FOG_FAR_BASE  - k * (FOG_FAR_BASE  - 22);  // 52 -> 22
+    // ease the fog window so a quick zoom doesn't snap the dim on/off
+    scene.fog.near += (targetNear - scene.fog.near) * ease;
+    scene.fog.far  += (targetFar  - scene.fog.far ) * ease;
   }
 
   controls.autoRotate = autorotate && camT>=1;
