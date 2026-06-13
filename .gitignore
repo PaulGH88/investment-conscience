@@ -6,3 +6,6 @@ Thumbs.db
 
 # local dev servers / logs
 *.log
+
+# pre-deploy backup snapshots (local only)
+index.html.bak-*

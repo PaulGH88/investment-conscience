@@ -104,12 +104,18 @@
   }
   #tools button:hover{color:var(--ink); border-color:var(--conscience);}
   #tools button.on{color:#150a26; background:var(--conscience); border-color:var(--conscience);}
-  /* desktop: Nina face avatar inline before the "Nina:" label */
-  #btnLipsync::before{
+  /* desktop: narrator face avatar inline before the narrator name label.
+     The face swaps with the selected narrator via [data-face] on the button:
+       data-face="paul" -> Paul, data-face="nina" -> Nina, data-face="off" -> generic.
+     Default markup ships data-face="paul" so Paul is the default narrator. */
+  #btnNarrator::before{
     content:""; display:inline-block; vertical-align:middle;
     width:17px; height:17px; border-radius:50%; margin:-2px 7px 0 0;
-    background:url("posters/nina-face.png") center/cover;
+    background:#26314c center/cover;       /* fallback tint for the "off" state */
   }
+  #btnNarrator[data-face="paul"]::before{ background-image:url("posters/paul-face.png"); }
+  #btnNarrator[data-face="nina"]::before{ background-image:url("posters/nina-face.png"); }
+  #btnNarrator[data-face="off"]::before{ background-image:none; }
 
   /* ---- Nina lip-sync talking-head panel (shown only when lip-sync video is ON) ---- */
   #ninaWrap{
@@ -183,7 +189,11 @@
     }
     #tools button::before{ font-size:15px; line-height:1; }
     #btnRotate::before{ content:"\21bb"; }     /* orbit glyph */
-    #btnLipsync::before{ content:""; width:24px; height:24px; border-radius:50%; margin:0; background:url("posters/nina-face.png") center/cover; display:inline-block; }    /* Nina face avatar */
+    /* narrator face avatar (swaps with the selected narrator via [data-face]) */
+    #btnNarrator::before{ content:""; width:24px; height:24px; border-radius:50%; margin:0; background:#26314c center/cover; display:inline-block; }
+    #btnNarrator[data-face="paul"]::before{ background-image:url("posters/paul-face.png"); }
+    #btnNarrator[data-face="nina"]::before{ background-image:url("posters/nina-face.png"); }
+    #btnNarrator[data-face="off"]::before{ content:"\1F507"; background-image:none; font-size:15px; } /* muted-speaker glyph when audio-only/off */
     #btnAuto::before{ content:"\25B6"; }        /* play triangle */
     #btnAuto.on::before{ content:"\25A0"; }     /* stop square when narrating */
 
@@ -257,14 +267,20 @@
 
   <div id="tools">
     <button id="btnRotate" type="button" class="on">Auto-orbit: on</button>
-    <button id="btnLipsync" type="button">Nina: off</button>
+    <!-- Narrator switch: cycles audio-only(off) -> Paul (video) -> Nina (video).
+         Default = Paul as the narrator (his voice narrates by default), audio-only on load
+         (panel hidden until you turn the video on). data-face drives the avatar. -->
+    <button id="btnNarrator" type="button" data-face="paul" title="Switch narrator (Paul / Nina) and turn the talking-head video on or off">Paul</button>
     <button id="btnAuto" type="button" class="on">Stop narration &#9632;</button>
   </div>
 
-  <!-- Nina lip-synced talking-head panel: shown only when lip-sync video is ON -->
+  <!-- Narrator lip-synced talking-head panel: shown only when the video panel is ON.
+       Narrator-agnostic: the <video> src, <video> poster, and caption are all set per
+       narrator in JS (Paul is the default). IDs kept as #ninaWrap/#ninaVid/#ninaCap for
+       continuity with the rest of the deck's wiring. -->
   <div id="ninaWrap" aria-hidden="true">
-    <video id="ninaVid" preload="none" playsinline poster="posters/nina-poster.jpg"></video>
-    <div id="ninaCap">Nina Vale</div>
+    <video id="ninaVid" preload="none" playsinline poster="posters/paul-poster.jpg"></video>
+    <div id="ninaCap">Paul</div>
   </div>
 
   <div id="card">
@@ -344,7 +360,8 @@ const STREAMS = [];        // flowing connector particles between chain nodes
 const STREAMS_ARROWS = []; // AI-compression arrows (declared before buildScene uses it)
 let consciousRing, aiBar, loopGroup, wspGroup;
 let autorotate = true, autoplay = true;   // defaults: auto-orbit ON + auto-narration ON
-let lipsync = false;   // lip-sync video narration toggle (Nina talking-head per scene)
+// Narrator state (voiceNarrator / videoNarrator / lipsync mirror) is declared in the
+// narration block lower down, next to the media wiring it drives.
 
 /* ---------------------------------------------------------------------------
    DEVICE PROFILE - drives every mobile/low-power branch. Computed ONCE.
@@ -873,26 +890,63 @@ const SCENES = [
   }
 ];
 
-/* ---------- narration: one mp3 + (optional) one lip-sync mp4 per scene ----------
-   Two media sources per scene:
-     - audio:   audio/slide-N.mp3        (always present; the fallback)
-     - lipsync: lipsync/slide-N.mp4      (Nina talking-head; shown when toggle ON)
-   When the lip-sync toggle is ON and a slide's mp4 is available, that scene is
-   narrated by Nina's lip-synced video; otherwise it falls back to audio-only.
-   A single media layer (loadMedia / stopMedia / onMediaEnded) drives BOTH the
-   per-slide play button and narrated-autoplay, so the two modes share one path. */
+/* ---------- narration: TWO narrators (Paul = default, Nina = selectable) --------
+   Each scene has, per narrator, an audio mp3 + an (optional) lip-sync mp4:
+     - Paul audio:   audio/paul/slide-N.mp3     (always present; the fallback)
+     - Paul lipsync: lipsync/paul/slide-N.mp4   (HeyGen talking-head; dropped in later)
+     - Nina audio:   audio/nina/slide-N.mp3     (always present; the fallback)
+     - Nina lipsync: lipsync/nina/slide-N.mp4   (Nina talking-head; already present)
+
+   Control model (two independent ideas, both narrator-aware):
+     - voiceNarrator : whose VOICE narrates. Default 'paul'. Always meaningful, even
+                       in audio-only mode, so Paul narrates by default.
+     - videoNarrator : null | 'paul' | 'nina'. When non-null, that narrator's
+                       talking-head VIDEO panel is shown and that narrator also
+                       becomes the voice. null = audio-only (panel hidden) with the
+                       default narrator's voice.
+   The #btnNarrator control cycles videoNarrator: 'paul' -> 'nina' -> null -> 'paul'
+   (starts on Paul, the default). When videoNarrator is null we fall back to
+   voiceNarrator='paul' (the default voice), so Paul always narrates by default.
+
+   Per-narrator graceful fallback is preserved: if the selected narrator has no
+   video for a scene (e.g. Paul's HeyGen clips not rendered yet), that scene plays
+   that narrator's AUDIO instead, with the panel showing the narrator's poster + name. */
+const NARRATORS = {
+  paul: { name:'Paul',      face:'paul', audioDir:'audio/paul', videoDir:'lipsync/paul', poster:'posters/paul-poster.jpg' },
+  nina: { name:'Nina Vale', face:'nina', audioDir:'audio/nina', videoDir:'lipsync/nina', poster:'posters/nina-poster.jpg' }
+};
+const DEFAULT_NARRATOR = 'paul';            // Paul is the default narrator
+let voiceNarrator = DEFAULT_NARRATOR;       // whose voice narrates (always a real narrator)
+let videoNarrator = DEFAULT_NARRATOR;       // on load: Paul's panel is shown (his portrait
+                                            // is the default). null = audio-only (no panel).
+
 const VO  = document.getElementById('vo');     // <audio>
-const VID = document.getElementById('ninaVid'); // <video> (Nina talking head)
-function voSrc(i){  return `audio/slide-${i+1}.mp3`; }
-function vidSrc(i){ return `lipsync/slide-${i+1}.mp4`; }
+const VID = document.getElementById('ninaVid'); // <video> (narrator talking head)
+function voSrc(i){  return `${NARRATORS[voiceNarrator].audioDir}/slide-${i+1}.mp3`; }
+function vidSrc(i){ const n = videoNarrator || voiceNarrator;
+                    return `${NARRATORS[n].videoDir}/slide-${i+1}.mp4`; }
 
-// per-slide lip-sync availability: undefined=unknown, true/false once probed.
-// A failed video load (404 / stub) marks the slide false and we fall back to audio.
+// per-(narrator,slide) lip-sync availability: keyed "<narrator>:<i>".
+//   undefined = unknown, true/false once probed. A failed video load (404 / missing
+//   file - e.g. Paul's HeyGen clips before they're rendered) marks that pair false and
+//   we fall back to that narrator's audio for the scene. Per narrator so switching
+//   narrators re-probes the other one's set independently.
 const lipsyncAvail = {};
+function availKey(n, i){ return `${n}:${i}`; }
 
-// is the lip-sync video the active medium for scene i right now?
-function useVideo(i){ return lipsync && lipsyncAvail[i] !== false; }
+// is a talking-head video the active medium for scene i right now?
+//   true only when a narrator's video panel is selected AND this scene's clip for
+//   that narrator hasn't been marked missing. Otherwise audio-only (the fallback).
+function useVideo(i){
+  if (!videoNarrator) return false;                      // audio-only mode
+  return lipsyncAvail[availKey(videoNarrator, i)] !== false;
+}
 function activeEl(i){ return useVideo(i) ? VID : VO; }
+
+// back-compat shim: some older call sites read a boolean `lipsync`. It now means
+// "is a video narrator selected" (panel on). Kept as a getter-like local update so
+// existing references (prefetch, priming) keep working.
+let lipsync = (videoNarrator != null);   // mirror of (videoNarrator != null); kept in sync on every toggle
 
 function showNina(on){
   const w = $('ninaWrap');
@@ -900,12 +954,19 @@ function showNina(on){
   w.setAttribute('aria-hidden', on ? 'false' : 'true');
 }
 
-// load scene i's narration into the right element and (optionally) play it
+// load scene i's narration into the right element and (optionally) play it.
+// Narrator-aware: caption + poster reflect the selected narrator; the talking-head
+// panel shows that narrator's video, or (when their video for this scene is missing)
+// falls back to that narrator's AUDIO with a poster+name "audio narration" panel.
 function loadMedia(i, play){
+  // the narrator currently driving the visible panel (video narrator when one is
+  // selected, else the default voice narrator so a poster still reads correctly)
+  const panelN = NARRATORS[videoNarrator || voiceNarrator];
   if (useVideo(i)){
     showNina(true);
     $('ninaWrap').classList.remove('missing');
-    $('ninaCap').textContent = 'Nina Vale';
+    $('ninaCap').textContent = panelN.name;
+    VID.poster = panelN.poster;
     try{ VO.pause(); }catch(e){}
     if (decodeURI(VID.currentSrc||VID.src||'').indexOf(vidSrc(i)) === -1){
       VID.src = vidSrc(i);
@@ -916,10 +977,17 @@ function loadMedia(i, play){
       if (p && p.catch) p.catch(()=>{ /* gesture-gated until first interaction */ });
     }
   } else {
-    // audio path (default, and the fallback when a slide has no/failed video)
-    if (lipsync){ showNina(true); $('ninaWrap').classList.add('missing');
-      $('ninaCap').textContent = 'Audio narration (no video for this scene yet)'; }
-    else showNina(false);
+    // audio path (default, and the fallback when a slide has no/failed video).
+    // When a video narrator is selected but THIS scene has no clip for them yet,
+    // keep the panel up showing their poster + an "audio narration" note.
+    if (videoNarrator){
+      showNina(true);
+      $('ninaWrap').classList.add('missing');
+      VID.poster = panelN.poster;
+      $('ninaCap').textContent = panelN.name + ' - audio (video coming soon)';
+    } else {
+      showNina(false);
+    }
     try{ VID.pause(); }catch(e){}
     VO.src = voSrc(i);
     VO.currentTime = 0;
@@ -955,12 +1023,18 @@ function prefetchNext(i){
   }
 }
 
-// the lip-sync video failed to load for this scene -> remember it, fall back to audio
+// the lip-sync video failed to load for this scene -> remember it PER NARRATOR and
+// fall back to that narrator's audio. Keyed by (videoNarrator, scene) so e.g. Paul's
+// not-yet-rendered HeyGen clips fall back to his audio without affecting Nina's set.
 VID.addEventListener('error', ()=>{
-  lipsyncAvail[cur] = false;
-  if (lipsync){ loadMedia(cur, autoplay); }   // re-route this scene to audio
+  if (videoNarrator){
+    lipsyncAvail[availKey(videoNarrator, cur)] = false;
+    loadMedia(cur, autoplay);   // re-route this scene to the narrator's audio
+  }
 });
-VID.addEventListener('loadeddata', ()=>{ lipsyncAvail[cur] = true; });
+VID.addEventListener('loadeddata', ()=>{
+  if (videoNarrator) lipsyncAvail[availKey(videoNarrator, cur)] = true;
+});
 
 // kept for back-compat with any older call sites in this file
 function loadVO(i, play){ loadMedia(i, play); }
@@ -1270,17 +1344,46 @@ $('btnRotate').onclick = (e)=>{ autorotate=!autorotate; e.target.classList.toggl
   e.target.textContent = 'Auto-orbit: '+(autorotate?'on':'off'); };
 $('btnAuto').onclick = ()=>{ autoplay?stopAuto():startAuto(); };
 
-// lip-sync toggle: ON => Nina narrates each scene as a lip-synced talking-head video
-// (autoplay + per-slide), with audio-only as the per-scene fallback. OFF => audio-only.
-$('btnLipsync').onclick = (e)=>{
-  lipsync = !lipsync;
-  e.target.classList.toggle('on', lipsync);
-  e.target.textContent = 'Nina: ' + (lipsync ? 'on' : 'off');
+/* ---- Narrator switch ----------------------------------------------------------
+   #btnNarrator cycles: audio-only(off) -> Paul (video) -> Nina (video) -> off.
+     - "off"  : videoNarrator=null, panel hidden, the DEFAULT narrator (Paul) narrates
+                audio-only. The face avatar greys to a muted/speaker glyph.
+     - "Paul" : videoNarrator='paul', voiceNarrator='paul', Paul's talking-head panel
+                (falls back to Paul's audio + poster for scenes with no clip yet).
+     - "Nina" : videoNarrator='nina', voiceNarrator='nina', Nina's talking-head panel.
+   In every state Paul is the on-load default (off => Paul's voice), satisfying
+   "Paul is the default narrator." */
+// tap order: start on Paul (the default), then Nina, then audio-only, then back to Paul.
+const NARRATOR_CYCLE = ['paul', 'nina', null];
+function applyNarratorButton(){
+  const b = $('btnNarrator');
+  if (videoNarrator){
+    b.classList.add('on');
+    b.dataset.face = NARRATORS[videoNarrator].face;     // paul|nina face avatar
+    b.textContent = NARRATORS[videoNarrator].name;       // "Paul" / "Nina Vale"
+  } else {
+    b.classList.remove('on');
+    b.dataset.face = 'off';                              // muted/greyed avatar
+    b.textContent = 'Audio only';
+  }
+}
+// set the narrator state (video panel + voice) and reload the current scene's media,
+// preserving whether narration was actively playing.
+function setNarrator(nextVideo){
+  videoNarrator = nextVideo;                 // null | 'paul' | 'nina'
+  voiceNarrator = nextVideo || DEFAULT_NARRATOR;  // off -> default voice (Paul)
+  lipsync = (videoNarrator != null);         // keep the back-compat mirror in sync
+  applyNarratorButton();
   const wasPlaying = (!VO.paused && !VO.ended) || (!VID.paused && !VID.ended);
   stopMedia();
-  // swap this scene to the newly-selected medium; resume if we were mid-narration
+  // swap this scene to the newly-selected narrator/medium; resume if mid-narration
   loadMedia(cur, wasPlaying || autoplay);
+}
+$('btnNarrator').onclick = ()=>{
+  const idx = NARRATOR_CYCLE.indexOf(videoNarrator);
+  setNarrator(NARRATOR_CYCLE[(idx + 1) % NARRATOR_CYCLE.length]);
 };
+applyNarratorButton();   // initialize the button to the default (Paul, audio-only) state
 
 // per-slide play/pause button: hear/see THIS scene on demand (works in both modes)
 $('playSlide').onclick = ()=>{
@@ -1345,6 +1448,12 @@ function initMobile(){
   gate.setAttribute('aria-hidden','false');
   const unlock = ()=>{
     gate.removeEventListener('click', unlock);
+    // primer: satisfy the browser autoplay gate by muted-play-then-pause within the
+    // tap gesture. Returns a promise that resolves AFTER its own deferred pause has
+    // settled - so the caller can wait for ALL priming pauses to finish before it
+    // starts real slide-1 playback. (Previously the primer's deferred .then(pause)
+    // could resolve AFTER startAuto()'s real play() and cancel slide 1, leaving it
+    // paused while autoplay=true - "Stop narration" showing but nothing playing.)
     const primer = (el)=>{
       try{
         const wasMuted = el.muted;
@@ -1353,18 +1462,26 @@ function initMobile(){
         if (!el.src){ el.src = (el===VID) ? vidSrc(0) : voSrc(0); }
         const p = el.play();
         if (p && p.then){
-          p.then(()=>{ el.pause(); el.currentTime = 0; el.muted = wasMuted; })
-           .catch(()=>{ el.muted = wasMuted; });
-        } else { el.pause(); el.muted = wasMuted; }
-      }catch(e){ /* best-effort priming */ }
+          return p.then(()=>{ el.pause(); el.currentTime = 0; el.muted = wasMuted; })
+                  .catch(()=>{ el.muted = wasMuted; });
+        }
+        el.pause(); el.muted = wasMuted;
+        return Promise.resolve();
+      }catch(e){ /* best-effort priming */ return Promise.resolve(); }
     };
-    primer(VO);
-    primer(VID);
+    const primers = [ primer(VO), primer(VID) ];
     mediaUnlocked = true;
     gate.classList.remove('show');
     gate.setAttribute('aria-hidden','true');
-    // start narrated playback for the scene the user is on (slide 1 by default)
-    setTimeout(()=>{ startAuto(); }, 60);
+    // Start narrated playback for the scene the user is on (slide 1 by default)
+    // ONLY after BOTH priming pauses have settled, so the real slide-1 play() can
+    // never be cancelled by a primer's deferred pause. A one-shot guard makes sure
+    // startAuto fires exactly once even if a safety timer and the promise both land.
+    let autoStarted = false;
+    const beginSlide1 = ()=>{ if (autoStarted) return; autoStarted = true; startAuto(); };
+    Promise.allSettled(primers).then(beginSlide1);
+    // Safety net: if the primer promises never settle (pathological), still start.
+    setTimeout(beginSlide1, 250);
   };
   gate.addEventListener('click', unlock, { once:false });
 
