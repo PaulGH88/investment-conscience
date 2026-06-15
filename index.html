@@ -270,7 +270,7 @@
     <!-- Narrator switch: cycles audio-only(off) -> Paul (video) -> Nina (video).
          Default = Paul as the narrator (his voice narrates by default), audio-only on load
          (panel hidden until you turn the video on). data-face drives the avatar. -->
-    <button id="btnNarrator" type="button" data-face="paul" title="Switch narrator (Paul / Nina) and turn the talking-head video on or off">Paul</button>
+    <button id="btnNarrator" type="button" data-face="off" title="Switch narrator (Paul / Nina) and turn the talking-head video on or off">Audio only</button>
     <button id="btnAuto" type="button" class="on">Stop narration &#9632;</button>
   </div>
 
@@ -309,7 +309,7 @@
     <div class="tg-kicker">Investment Conscience</div>
     <div class="tg-play">&#9654;</div>
     <div class="tg-title">Tap to begin</div>
-    <div class="tg-sub">Unlocks narration and the lip-sync video for this interactive deck.</div>
+    <div class="tg-sub">Unlocks narration for this interactive deck.</div>
   </div>
 
   <!-- single narration element; src swaps per scene -->
@@ -917,8 +917,9 @@ const NARRATORS = {
 };
 const DEFAULT_NARRATOR = 'paul';            // Paul is the default narrator
 let voiceNarrator = DEFAULT_NARRATOR;       // whose voice narrates (always a real narrator)
-let videoNarrator = DEFAULT_NARRATOR;       // on load: Paul's panel is shown (his portrait
-                                            // is the default). null = audio-only (no panel).
+let videoNarrator = null;                   // on load: audio-only (no talking-head panel).
+                                            // Paul's voice still narrates by default; the user
+                                            // chooses Paul or Nina video via the narrator button.
 
 const VO  = document.getElementById('vo');     // <audio>
 const VID = document.getElementById('ninaVid'); // <video> (narrator talking head)
