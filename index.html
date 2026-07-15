@@ -130,9 +130,23 @@
     width:100%; display:block; border-radius:10px; background:#0a0e16;
     aspect-ratio:332/720; object-fit:cover;
   }
+  /* Poster-hold: shows the narrator's face over any video buffering gap so a
+     cold/slow clip load never paints the panel's black background. Sits on top
+     of the <video>, fades out once a real frame is ready, fades back in on a
+     mid-scene rebuffer. Fix for the Scene-7 black-rectangle on mobile. */
+  #ninaHold{
+    position:absolute; top:8px; left:8px; width:calc(100% - 16px);
+    aspect-ratio:332/720; border-radius:10px;
+    object-fit:cover; object-position:center top;
+    z-index:1; pointer-events:none; background:#0a0e16;
+    opacity:1; transition:opacity .18s ease;
+  }
+  #ninaHold.hide{ opacity:0; }
+  #ninaWrap.missing #ninaHold{ display:none; }
   #ninaCap{
     margin-top:6px; text-align:center; font-size:11px; color:var(--conscience);
     letter-spacing:1px; text-transform:uppercase; font-weight:700;
+    position:relative; z-index:2;
   }
   #ninaWrap.missing #ninaVid{display:none;}
   #ninaWrap.missing #ninaCap{color:var(--muted); text-transform:none; letter-spacing:.2px;}
@@ -216,6 +230,7 @@
       border-radius:12px;
     }
     #ninaVid{ border-radius:8px; }
+    #ninaHold{ top:4px; left:4px; width:calc(100% - 8px); border-radius:8px; }
     #ninaCap{ font-size:8px; letter-spacing:.5px; margin-top:3px; }
 
     /* --- rail: safe-area aware, sits above the bottom sheet --- */
@@ -279,7 +294,8 @@
        narrator in JS (Paul is the default). IDs kept as #ninaWrap/#ninaVid/#ninaCap for
        continuity with the rest of the deck's wiring. -->
   <div id="ninaWrap" aria-hidden="true">
-    <video id="ninaVid" preload="none" playsinline poster="posters/paul-poster.jpg"></video>
+    <video id="ninaVid" preload="metadata" playsinline poster="posters/paul-poster.jpg"></video>
+    <img id="ninaHold" alt="" aria-hidden="true" src="posters/paul-poster.jpg">
     <div id="ninaCap">Paul</div>
   </div>
 
@@ -923,6 +939,7 @@ let videoNarrator = null;                   // on load: audio-only (no talking-h
 
 const VO  = document.getElementById('vo');     // <audio>
 const VID = document.getElementById('ninaVid'); // <video> (narrator talking head)
+const HOLD = document.getElementById('ninaHold'); // poster-hold overlay (covers video buffering gaps)
 function voSrc(i){  return `${NARRATORS[voiceNarrator].audioDir}/slide-${i+1}.mp3`; }
 function vidSrc(i){ const n = videoNarrator || voiceNarrator;
                     return `${NARRATORS[n].videoDir}/slide-${i+1}.mp4`; }
@@ -968,6 +985,9 @@ function loadMedia(i, play){
     $('ninaWrap').classList.remove('missing');
     $('ninaCap').textContent = panelN.name;
     VID.poster = panelN.poster;
+    // hold the narrator's face over the panel until a real frame is ready, so a
+    // cold/slow clip load never shows the video's black background (Scene-7 fix).
+    if (HOLD){ HOLD.src = panelN.poster; HOLD.classList.remove('hide'); }
     try{ VO.pause(); }catch(e){}
     if (decodeURI(VID.currentSrc||VID.src||'').indexOf(vidSrc(i)) === -1){
       VID.src = vidSrc(i);
@@ -1015,7 +1035,8 @@ function prefetchNext(i){
     _prefetched.add(akey);
     const a = new Audio(); a.preload = 'auto'; a.src = voSrc(n);
   }
-  if (lipsync && !MOBILE){
+  if (lipsync){   // Part B: warm the NEXT scene's clip on mobile too (one clip ahead),
+                  // so the video itself is ready-or-close when you arrive. Desktop unchanged.
     const vkey = 'v'+n;
     if (!_prefetched.has(vkey)){
       _prefetched.add(vkey);
@@ -1035,7 +1056,13 @@ VID.addEventListener('error', ()=>{
 });
 VID.addEventListener('loadeddata', ()=>{
   if (videoNarrator) lipsyncAvail[availKey(videoNarrator, cur)] = true;
+  if (HOLD) HOLD.classList.add('hide');   // a real frame is ready -> reveal the video
 });
+// keep the face up through the whole gap: reveal on 'playing', re-cover on any
+// rebuffer/reset so the panel is never a black rectangle mid-scene either.
+VID.addEventListener('playing', ()=>{ if (HOLD) HOLD.classList.add('hide'); });
+VID.addEventListener('waiting', ()=>{ if (HOLD) HOLD.classList.remove('hide'); });
+VID.addEventListener('emptied', ()=>{ if (HOLD) HOLD.classList.remove('hide'); });
 
 // kept for back-compat with any older call sites in this file
 function loadVO(i, play){ loadMedia(i, play); }
