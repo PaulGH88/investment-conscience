@@ -1078,6 +1078,9 @@ VID.addEventListener('error', ()=>{
   if (videoNarrator){
     lipsyncAvail[availKey(videoNarrator, cur)] = false;
     loadMedia(cur, autoplay);   // re-route this scene to the narrator's audio
+    syncPlaySlideUI();          // the re-route can leave VID mid-pause with VO not yet
+                                 // playing - force the icon to match reality, not the
+                                 // 'pause' event this re-route also queues on VID.
   }
 });
 VID.addEventListener('loadeddata', ()=>{
@@ -1220,6 +1223,7 @@ function goScene(i, instant=false){
   // ---- narration: in narrated-autoplay, play this scene's clip; otherwise just preload it ----
   if (autoplay) loadVO(cur, true);
   else { stopVO(); loadVO(cur, false); }
+  syncPlaySlideUI();   // force the icon to match reality - see syncPlaySlideUI()'s own comment, below in this file
   prefetchNext(cur);   // warm only slide N+1's audio (and mp4 on desktop w/ lip-sync)
 
   // ---- rail state ----
@@ -1464,6 +1468,7 @@ function setNarrator(nextVideo){
   stopMedia();
   // swap this scene to the newly-selected narrator/medium; resume if mid-narration
   loadMedia(cur, wasPlaying || autoplay);
+  syncPlaySlideUI();
 }
 $('btnNarrator').onclick = ()=>{
   const idx = NARRATOR_CYCLE.indexOf(videoNarrator);
@@ -1474,17 +1479,45 @@ applyNarratorButton();   // initialize the button to the default (Paul, audio-on
 // per-slide play/pause button: hear/see THIS scene on demand (works in both modes)
 $('playSlide').onclick = ()=>{
   const el = activeEl(cur);
-  if (!el.paused && !el.ended){ stopMedia(); return; }   // toggle off if playing
+  if (!el.paused && !el.ended){ stopMedia(); syncPlaySlideUI(); return; }   // toggle off if playing
   loadMedia(cur, true);
+  syncPlaySlideUI();
 };
+
+// Deterministic sync for the per-slide play/pause icon: reads the ACTUAL .paused
+// state of the CURRENT active element instead of trusting only 'play'/'pause'
+// events. .paused flips synchronously the instant play()/pause() is called (per
+// spec) even though the matching DOM event can fire late or out of order - so an
+// event-only approach can leave the icon showing "playing" after a burst of rapid
+// clicks left nothing actually making sound. Bug: Paul, 2026-09-08 - clicking Next
+// several times fast landed on a scene where the per-slide button still showed
+// pause (thinks playing) while narration had truly stopped (the top-right "Play
+// narrated" button had it right). Call this after any of OUR OWN actions that
+// change play state; the event listeners below remain as a second, redundant path
+// for organic changes (e.g. a clip reaching its natural end).
+function syncPlaySlideUI(){
+  const el = activeEl(cur);
+  const playing = !!el && !el.paused && !el.ended;
+  $('playSlide').classList.toggle('playing', playing);
+  $('playSlide').innerHTML = playing ? '&#10073;&#10073;' : '&#9654;';
+}
 
 // a single handler reused for both <audio> and <video>: reflect button state +
 // drive narrated-autoplay advance when whichever medium is playing finishes.
+// Guarded to the CURRENTLY ACTIVE element only - a stale/late event from the
+// element that ISN'T driving the current scene (e.g. the other narrator's medium,
+// or a scene we've already navigated away from) must not touch the shared button.
+// Each handler re-reads ground truth via syncPlaySlideUI() rather than trusting the
+// EVENT TYPE itself - a 'play' event firing late on the still-active element (after
+// something else has since paused it) would otherwise re-assert "playing" against
+// an element whose real .paused is already true. Reading .paused fresh at fire time
+// converges to the truth regardless of how stale or out-of-order the event was.
 function bindMedia(el){
-  el.addEventListener('play',  ()=>{ $('playSlide').classList.add('playing');  $('playSlide').innerHTML='&#10073;&#10073;'; });
-  el.addEventListener('pause', ()=>{ $('playSlide').classList.remove('playing'); $('playSlide').innerHTML='&#9654;'; });
+  el.addEventListener('play',  ()=>{ if (activeEl(cur) !== el) return; syncPlaySlideUI(); });
+  el.addEventListener('pause', ()=>{ if (activeEl(cur) !== el) return; syncPlaySlideUI(); });
   el.addEventListener('ended', ()=>{
-    $('playSlide').classList.remove('playing'); $('playSlide').innerHTML='&#9654;';
+    if (activeEl(cur) !== el) return;
+    syncPlaySlideUI();
     // narrated-autoplay: advance to the next scene when this scene's clip finishes
     if (autoplay){
       if (cur >= SCENES.length-1){ stopAuto(); }   // reached the end: stop cleanly
@@ -1503,12 +1536,14 @@ function startAuto(){
   $('btnAuto').innerHTML = 'Stop narration &#9632;';
   // (re)start from the current scene and play its clip (video or audio)
   loadMedia(cur, true);
+  syncPlaySlideUI();
 }
 function stopAuto(){
   autoplay = false;
   stopMedia();
   $('btnAuto').classList.remove('on');
   $('btnAuto').innerHTML = 'Play narrated &#9654;';
+  syncPlaySlideUI();
 }
 
 window.addEventListener('keydown', e=>{
