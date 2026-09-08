@@ -79,13 +79,16 @@
     padding:12px 22px; background:linear-gradient(0deg,#05070d 30%,rgba(5,7,13,0));
   }
   #rail button{
-    background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    /* real alpha, NO blur: a blur would smear the very text behind the button that
+       Paul asked to stay readable - alpha alone lets it show through sharp. */
+    background:rgba(20,25,37,.38); color:var(--ink); border:1px solid rgba(30,40,64,.6);
     border-radius:9px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:650;
-    transition:.15s;
+    transition:.15s; text-shadow:0 1px 4px rgba(0,0,0,.5);
   }
-  #rail button:hover:not(:disabled){border-color:var(--conscience); color:#fff;}
+  #rail button:hover:not(:disabled){border-color:var(--conscience); color:#fff; background:rgba(20,25,37,.58);}
   #rail button:disabled{opacity:.35; cursor:default;}
-  #rail button.primary{background:var(--conscience); color:#150a26; border-color:var(--conscience);}
+  #rail button.primary{background:rgba(185,139,255,.64); color:#150a26; border-color:rgba(185,139,255,.9); text-shadow:none;}
+  #rail button.primary:hover:not(:disabled){background:rgba(185,139,255,.8);}
   #dots{display:flex; gap:7px; flex:1; align-items:center; justify-content:center;}
   #dots .dot{
     width:11px; height:11px; border-radius:50%; background:#26314c; cursor:pointer;
@@ -123,9 +126,14 @@
     background:var(--panel); border:1px solid var(--conscience); border-radius:16px;
     padding:8px; backdrop-filter:blur(14px);
     box-shadow:0 24px 60px rgba(0,0,0,.6);
-    display:none;                 /* hidden until lip-sync is toggled on */
+    cursor:pointer;
+    /* Hidden via opacity + pointer-events, NEVER display:none: some mobile browsers
+       suspend a <video>'s playback once it (or an ancestor) goes display:none, which
+       would silently break the "tap to close, narration keeps playing" fix below -
+       opacity:0 leaves the video fully alive, just invisible and unclickable. */
+    opacity:0; pointer-events:none; transition:opacity .25s ease;
   }
-  #ninaWrap.show{display:block;}
+  #ninaWrap.show{opacity:1; pointer-events:auto;}
   #ninaVid{
     width:100%; display:block; border-radius:10px; background:#0a0e16;
     aspect-ratio:332/720; object-fit:cover;
@@ -216,7 +224,13 @@
       left:0; right:0; bottom:0; width:auto;
       max-height:46vh; overflow-y:auto; -webkit-overflow-scrolling:touch;
       border-radius:16px 16px 0 0; border-left:none; border-right:none; border-bottom:none;
-      padding:14px 16px calc(56px + env(safe-area-inset-bottom));
+      /* --railH is measured live off the real #rail element (JS: syncRailClearance) so
+         this always clears the ACTUAL rendered nav-bar height, not a guessed constant -
+         see the "bottom text cut off" fix note near syncRailClearance() in the script.
+         Fallback (JS not yet run, or errored before syncRailClearance() fires) keeps the
+         ORIGINAL safe-area-aware guess rather than a plain constant, so a phone with a
+         home-indicator inset never regresses below what it had before this fix. */
+      padding:14px 16px calc(var(--railH, calc(56px + env(safe-area-inset-bottom))) + 14px);
       box-shadow:0 -16px 50px rgba(0,0,0,.6);
     }
     #card h2{ font-size:19px; line-height:1.2; }
@@ -250,7 +264,7 @@
   @media (max-width:990px) and (max-height:520px) and (orientation:landscape){
     #card{
       max-height:62vh; top:auto; bottom:0;
-      padding:10px 16px calc(48px + env(safe-area-inset-bottom));
+      padding:10px 16px calc(var(--railH, calc(48px + env(safe-area-inset-bottom))) + 12px);
     }
     #card h2{ font-size:16px; }
     #brand h1{ font-size:12px; }
@@ -293,7 +307,7 @@
        Narrator-agnostic: the <video> src, <video> poster, and caption are all set per
        narrator in JS (Paul is the default). IDs kept as #ninaWrap/#ninaVid/#ninaCap for
        continuity with the rest of the deck's wiring. -->
-  <div id="ninaWrap" aria-hidden="true">
+  <div id="ninaWrap" aria-hidden="true" role="button" title="Tap to close (narration keeps playing)">
     <video id="ninaVid" preload="metadata" playsinline poster="posters/paul-poster.jpg"></video>
     <img id="ninaHold" alt="" aria-hidden="true" src="posters/paul-poster.jpg">
     <div id="ninaCap">Paul</div>
@@ -970,7 +984,19 @@ function showNina(on){
   const w = $('ninaWrap');
   w.classList.toggle('show', !!on);
   w.setAttribute('aria-hidden', on ? 'false' : 'true');
+  // tabindex only while actually shown - avoids the aria-hidden+focusable conflict
+  // a screen reader / keyboard-nav lint would flag on the hidden state.
+  if (on) w.setAttribute('tabindex', '0'); else w.removeAttribute('tabindex');
 }
+
+// Tap-to-dismiss on the narrator panel (Paul/Nina talking-head): hides the VISUAL
+// panel only. Whatever is narrating (the <video>'s own audio track, or the plain
+// <audio> element in audio-only mode) is never touched here, so narration keeps
+// playing after the panel closes. The dismissal is per-scene: goScene() resets the
+// flag on every scene change, so the next scene's narrator panel isn't left
+// permanently suppressed by an earlier tap. The click listener itself is wired
+// down in the UI-wiring section below (after the `$` helper is declared).
+let panelClosedByUser = false;
 
 // load scene i's narration into the right element and (optionally) play it.
 // Narrator-aware: caption + poster reflect the selected narrator; the talking-head
@@ -981,7 +1007,7 @@ function loadMedia(i, play){
   // selected, else the default voice narrator so a poster still reads correctly)
   const panelN = NARRATORS[videoNarrator || voiceNarrator];
   if (useVideo(i)){
-    showNina(true);
+    if (!panelClosedByUser) showNina(true);
     $('ninaWrap').classList.remove('missing');
     $('ninaCap').textContent = panelN.name;
     VID.poster = panelN.poster;
@@ -1002,7 +1028,7 @@ function loadMedia(i, play){
     // When a video narrator is selected but THIS scene has no clip for them yet,
     // keep the panel up showing their poster + an "audio narration" note.
     if (videoNarrator){
-      showNina(true);
+      if (!panelClosedByUser) showNina(true);
       $('ninaWrap').classList.add('missing');
       VID.poster = panelN.poster;
       $('ninaCap').textContent = panelN.name + ' - audio (video coming soon)';
@@ -1071,6 +1097,24 @@ function stopVO(){ stopMedia(); }
 /* ---------- scene control ---------- */
 const $ = id => document.getElementById(id);
 
+/* Bottom-sheet clearance fix (issue 3: last line of card text gets cut off on
+   mobile with no more room to scroll it into view). The mobile #card reserved a
+   HARD-CODED 56px (landscape: 48px) of bottom padding to clear the fixed #rail nav
+   bar sitting on top of it - but the rail's REAL rendered height (button padding +
+   its own safe-area padding) can exceed that guess on a given phone, so the last
+   line of a scene's text sits fully behind the rail with nowhere left to scroll to.
+   Fix: measure the rail's actual height live and feed it to the CSS via --railH,
+   which #card's mobile padding-bottom now reads (see the @media blocks above).
+   Desktop is unaffected - --railH is only consumed inside mobile-gated CSS. */
+function syncRailClearance(){
+  const rail = $('rail');
+  if (!rail) return;
+  const h = rail.getBoundingClientRect().height;
+  if (h > 0) document.documentElement.style.setProperty('--railH', h + 'px');
+}
+window.addEventListener('resize', syncRailClearance);
+window.addEventListener('orientationchange', ()=> setTimeout(syncRailClearance, 80));
+
 /* MOBILE-ONLY camera re-framing (issue 2).
    Given an authored camera position `pos` looking at `tgt`, return a NEW position
    pulled back along the same view vector so labels are readable on a narrow phone
@@ -1107,6 +1151,7 @@ function mobileFrame(pos, tgt){
 function goScene(i, instant=false){
   cur = Math.max(0, Math.min(SCENES.length-1, i));
   const s = SCENES[cur];
+  panelClosedByUser = false;   // a new scene reopens the narrator panel if selected
 
   // ---- set emissive TARGETS (the live bridge) ----
   Object.keys(NODES).forEach(k=>{
@@ -1169,6 +1214,7 @@ function goScene(i, instant=false){
     // copy), so re-measure the visible band and recompose the camera for it after
     // the content swaps in. No-op on desktop (applyMobileViewOffset is MOBILE-gated).
     if (MOBILE) applyMobileViewOffset(window.innerWidth, window.innerHeight);
+    syncRailClearance();
   }, instant ? 0 : 220);
 
   // ---- narration: in narrated-autoplay, play this scene's clip; otherwise just preload it ----
@@ -1371,6 +1417,17 @@ $('prev').onclick = ()=>{ stopAuto(); goScene(cur-1); };
 $('btnRotate').onclick = (e)=>{ autorotate=!autorotate; e.target.classList.toggle('on',autorotate);
   e.target.textContent = 'Auto-orbit: '+(autorotate?'on':'off'); };
 $('btnAuto').onclick = ()=>{ autoplay?stopAuto():startAuto(); };
+$('ninaWrap').addEventListener('click', ()=>{
+  panelClosedByUser = true;
+  showNina(false);
+});
+$('ninaWrap').addEventListener('keydown', (e)=>{
+  if (e.key === 'Enter' || e.key === ' '){
+    e.preventDefault();
+    panelClosedByUser = true;
+    showNina(false);
+  }
+});
 
 /* ---- Narrator switch ----------------------------------------------------------
    #btnNarrator cycles: audio-only(off) -> Paul (video) -> Nina (video) -> off.
@@ -1401,6 +1458,7 @@ function setNarrator(nextVideo){
   videoNarrator = nextVideo;                 // null | 'paul' | 'nina'
   voiceNarrator = nextVideo || DEFAULT_NARRATOR;  // off -> default voice (Paul)
   lipsync = (videoNarrator != null);         // keep the back-compat mirror in sync
+  panelClosedByUser = false;   // switching narrator is an explicit re-open, not a re-close
   applyNarratorButton();
   const wasPlaying = (!VO.paused && !VO.ended) || (!VID.paused && !VID.ended);
   stopMedia();
@@ -1556,6 +1614,7 @@ requestAnimationFrame(()=> requestAnimationFrame(()=>{
 init();
 buildScene();
 requestFrame();   // starts the (now pause-aware) render loop
+syncRailClearance();
 goScene(0, true);
 initMobile();     // tap-gate + swipe + media prefetch wiring (all no-ops on desktop)
 
