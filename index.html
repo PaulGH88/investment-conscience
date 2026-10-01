@@ -992,9 +992,9 @@ function showNina(on){
 // Tap-to-dismiss on the narrator panel (Paul/Nina talking-head): hides the VISUAL
 // panel only. Whatever is narrating (the <video>'s own audio track, or the plain
 // <audio> element in audio-only mode) is never touched here, so narration keeps
-// playing after the panel closes. The dismissal is per-scene: goScene() resets the
-// flag on every scene change, so the next scene's narrator panel isn't left
-// permanently suppressed by an earlier tap. The click listener itself is wired
+// playing after the panel closes. The dismissal is STICKY across slides (Paul,
+// 2026-10-01: a hide on slide one must hold for the whole sequence); it is cleared
+// only by an explicit narrator change in setNarrator(). The click listener itself is wired
 // down in the UI-wiring section below (after the `$` helper is declared).
 let panelClosedByUser = false;
 
@@ -1154,7 +1154,8 @@ function mobileFrame(pos, tgt){
 function goScene(i, instant=false){
   cur = Math.max(0, Math.min(SCENES.length-1, i));
   const s = SCENES[cur];
-  panelClosedByUser = false;   // a new scene reopens the narrator panel if selected
+  // NOTE: panelClosedByUser is deliberately NOT reset here. A tap that hides the narrator
+  // avatar holds for the whole slide sequence; only an explicit narrator change reopens it.
 
   // ---- set emissive TARGETS (the live bridge) ----
   Object.keys(NODES).forEach(k=>{
