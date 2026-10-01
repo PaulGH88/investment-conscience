@@ -1,6 +1,7 @@
 // Regression test: tapping the narrator avatar to hide it must keep it hidden for the
 // whole slide sequence (Paul, 2026-10-01). Runs the REAL index.html in headless Chrome
 // over a local static server and drives the real DOM - no mirrored logic.
+// Covers the desktop click path (Next/Prev); touch/swipe/autoplay paths were probed by hand in the Paired-Check.
 // Run: node tests/narrator-panel-dismiss.test.mjs   (needs Chrome and network for three.js)
 import http from 'node:http';
 import fs from 'node:fs';
@@ -47,7 +48,8 @@ let failed = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  ' + detail}`); if (!ok) failed++; };
 const shown = () => ev(`document.getElementById('ninaWrap').classList.contains('show')`);
 const click = sel => ev(`document.querySelector(${JSON.stringify(sel)}).click()`);
-const scene = () => ev(`document.getElementById('next') && (document.querySelector('[data-scene].on, #slideNum, #counter')||{}).textContent`);
+const counter = () => ev(`document.getElementById('counter').textContent`);
+const narrating = () => ev(`[...document.querySelectorAll('video,audio')].some(e => !e.paused && !e.ended)`);
 
 try {
   await send('Page.enable'); await send('Runtime.enable');
@@ -68,11 +70,18 @@ try {
   await click('#ninaWrap');               // Paul taps her avatar away
   check('tap hides the avatar on slide 1', (await shown()) === false);
 
+  await sleep(600);
+  check('narration keeps playing after the tap', (await narrating()) === true);
+
   for (let n = 2; n <= 4; n++) {
+    const before = await counter();
     await click('#next'); await sleep(400);
+    check(`slide ${n} really changed`, (await counter()) !== before);
     check(`avatar STAYS hidden on slide ${n}`, (await shown()) === false);
   }
+  const beforePrev = await counter();
   await click('#prev'); await sleep(300);
+  check('prev really changed the slide', (await counter()) !== beforePrev);
   check('avatar stays hidden going back a slide', (await shown()) === false);
 
   await click('#btnNarrator');            // Nina -> audio-only
