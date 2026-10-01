@@ -994,7 +994,8 @@ function showNina(on){
 // <audio> element in audio-only mode) is never touched here, so narration keeps
 // playing after the panel closes. The dismissal is STICKY across slides (Paul,
 // 2026-10-01: a hide on slide one must hold for the whole sequence); it is cleared
-// only by an explicit narrator change in setNarrator(). The click listener itself is wired
+// by setNarrator() or by the first narrator-button press, which just reopens the same
+// narrator's panel. The click listener itself is wired
 // down in the UI-wiring section below (after the `$` helper is declared).
 let panelClosedByUser = false;
 
@@ -1155,7 +1156,8 @@ function goScene(i, instant=false){
   cur = Math.max(0, Math.min(SCENES.length-1, i));
   const s = SCENES[cur];
   // NOTE: panelClosedByUser is deliberately NOT reset here. A tap that hides the narrator
-  // avatar holds for the whole slide sequence; only an explicit narrator change reopens it.
+  // avatar holds for the whole slide sequence; only the narrator button reopens it (the
+  // first press restores the same narrator, later presses cycle).
 
   // ---- set emissive TARGETS (the live bridge) ----
   Object.keys(NODES).forEach(k=>{
@@ -1441,6 +1443,8 @@ $('ninaWrap').addEventListener('keydown', (e)=>{
      - "Paul" : videoNarrator='paul', voiceNarrator='paul', Paul's talking-head panel
                 (falls back to Paul's audio + poster for scenes with no clip yet).
      - "Nina" : videoNarrator='nina', voiceNarrator='nina', Nina's talking-head panel.
+   Exception: if the avatar was tapped away, the FIRST press only reopens the same
+   narrator's panel (no cycle); later presses cycle as above.
    In every state Paul is the on-load default (off => Paul's voice), satisfying
    "Paul is the default narrator." */
 // tap order: start on Paul (the default), then Nina, then audio-only, then back to Paul.

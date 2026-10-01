@@ -1,7 +1,8 @@
 // Regression test: tapping the narrator avatar to hide it must keep it hidden for the
 // whole slide sequence (Paul, 2026-10-01). Runs the REAL index.html in headless Chrome
 // over a local static server and drives the real DOM - no mirrored logic.
-// Covers the desktop click path (Next/Prev); touch/swipe/autoplay paths were probed by hand in the Paired-Check.
+// Covers the desktop click path: sticky hide across Next/Prev, and first-press reopen on the narrator button.
+// Touch/swipe/autoplay paths were probed by hand in the Paired-Checks, not in this file.
 // Run: node tests/narrator-panel-dismiss.test.mjs   (needs Chrome and network for three.js)
 import http from 'node:http';
 import fs from 'node:fs';
@@ -49,6 +50,7 @@ const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} 
 const shown = () => ev(`document.getElementById('ninaWrap').classList.contains('show')`);
 const click = sel => ev(`document.querySelector(${JSON.stringify(sel)}).click()`);
 const counter = () => ev(`document.getElementById('counter').textContent`);
+const mediaState = () => ev(`(()=>{const e=[...document.querySelectorAll('video,audio')].find(x=>!x.paused&&!x.ended)||document.querySelector('video'); return JSON.stringify({src:e.currentSrc,t:e.currentTime});})()`);
 const narrating = () => ev(`[...document.querySelectorAll('video,audio')].some(e => !e.paused && !e.ended)`);
 
 try {
@@ -87,10 +89,12 @@ try {
   // one-tap restore: with the avatar hidden, the FIRST tap on the narrator button just
   // reopens the panel - same narrator, voice untouched (Paul, 2026-10-01)
   const playingBefore = await narrating();
+  const mediaBefore = JSON.parse(await mediaState());
   await click('#btnNarrator'); await sleep(300);
   check('first tap on narrator button reopens the hidden panel', (await shown()) === true);
   check('...and the narrator is still Nina', /nina/i.test(await ev(`document.getElementById('btnNarrator').textContent`)));
-  check('...and playback state untouched', (await narrating()) === playingBefore);
+  const mediaAfter = JSON.parse(await mediaState());
+  check('...and playback untouched (same clip, not restarted)', (await narrating()) === playingBefore && mediaAfter.src === mediaBefore.src && mediaAfter.t >= mediaBefore.t - 0.05);
   await click('#ninaWrap'); await sleep(200);
   check('hide again works', (await shown()) === false);
 
