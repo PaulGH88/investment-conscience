@@ -84,6 +84,17 @@ try {
   check('prev really changed the slide', (await counter()) !== beforePrev);
   check('avatar stays hidden going back a slide', (await shown()) === false);
 
+  // one-tap restore: with the avatar hidden, the FIRST tap on the narrator button just
+  // reopens the panel - same narrator, voice untouched (Paul, 2026-10-01)
+  const playingBefore = await narrating();
+  await click('#btnNarrator'); await sleep(300);
+  check('first tap on narrator button reopens the hidden panel', (await shown()) === true);
+  check('...and the narrator is still Nina', /nina/i.test(await ev(`document.getElementById('btnNarrator').textContent`)));
+  check('...and playback state untouched', (await narrating()) === playingBefore);
+  await click('#ninaWrap'); await sleep(200);
+  check('hide again works', (await shown()) === false);
+
+  await click('#btnNarrator');            // reopen (one tap)
   await click('#btnNarrator');            // Nina -> audio-only
   await click('#btnNarrator');            // -> Paul : explicit narrator change reopens
   await sleep(300);

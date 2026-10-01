@@ -1472,6 +1472,13 @@ function setNarrator(nextVideo){
   syncPlaySlideUI();
 }
 $('btnNarrator').onclick = ()=>{
+  // Avatar hidden by a tap: the first press of the narrator button just brings the
+  // same narrator's panel back (no cycle, voice and playback untouched).
+  if (videoNarrator && panelClosedByUser){
+    panelClosedByUser = false;
+    showNina(true);
+    return;
+  }
   const idx = NARRATOR_CYCLE.indexOf(videoNarrator);
   setNarrator(NARRATOR_CYCLE[(idx + 1) % NARRATOR_CYCLE.length]);
 };
